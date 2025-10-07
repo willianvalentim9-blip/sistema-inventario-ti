@@ -1,0 +1,500 @@
+/* ========================================
+   SISTEMA DE ESTOQUE TI - CSS PERSONALIZADO MELHORADO
+   Versão com melhorias de responsividade mobile e padronização (Comentado)
+   ======================================== */
+
+/*
+ * :root -> Define variáveis CSS globais.
+ * É o melhor lugar para configurar cores, fontes, tamanhos e espaçamentos
+ * que serão usados em todo o site, facilitando a manutenção do tema.
+*/
+:root {
+    /* --- Paleta de Cores --- */
+    --primary-color: #0d6efd; /* Azul principal: usado na sidebar, botões principais, etc. */
+    --primary-dark: #0a58ca; /* Tom mais escuro do azul: usado para efeito :hover em botões. */
+    --secondary-color: #6c757d; /* Cinza secundário: para botões e elementos de menor destaque. */
+    --light-bg: #f8f9fa; /* Fundo principal da página (cinza bem claro). */
+    --text-light: #ffffff; /* Cor de texto para fundos escuros (branco). */
+    --text-dark: #212529; /* Cor de texto para fundos claros (preto). */
+    --border-color: #e9ecef; /* Cor para bordas de cards, tabelas e divisórias. */
+
+    /* --- Efeitos --- */
+    --hover-color: rgba(255, 255, 255, 0.1); /* Efeito de sobreposição ao passar o mouse na sidebar (branco transparente). */
+    --active-color: #0b5ed7; /* Cor para links ativos ou selecionados. */
+    --border-radius-base: 0.375rem; /* Raio do arredondamento das bordas (em botões, cards). */
+    --box-shadow-base: 0 4px 15px rgba(0, 0, 0, 0.07); /* Sombra padrão para dar profundidade aos cards. */
+
+    /* --- Dimensões da Sidebar --- */
+    --sidebar-width: 250px; /* LARGURA da sidebar quando ABERTA. Altere aqui para mudar. */
+    --sidebar-collapsed-width: 80px; /* LARGURA da sidebar quando FECHADA. Altere aqui para mudar. */
+
+    /* --- Animações --- */
+    --transition-speed: 0.3s; /* Velocidade das animações (ex: abrir/fechar sidebar). */
+
+    /* --- Variáveis para Mobile --- */
+    --mobile-padding: 1rem; /* ESPAÇAMENTO interno principal em telas de celular. */
+    --mobile-margin: 0.5rem; /* MARGEM principal em telas de celular. */
+    --touch-target-size: 44px; /* ALTURA MÍNIMA para botões e links, facilitando o toque em celulares. */
+
+    /* --- Tamanhos de Ícones --- */
+    --icon-size-sm: 1rem; /* Tamanho pequeno. */
+    --icon-size-md: 1.25rem; /* Tamanho médio. */
+    --icon-size-lg: 1.5rem; /* Tamanho grande. */
+    --icon-size-xl: 2rem; /* Tamanho extra grande. */
+}
+
+/* --- Estilo Base da Página --- */
+body {
+    background-color: var(--light-bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-dark);
+    overflow-x: hidden; /* Impede a barra de rolagem horizontal. */
+}
+
+/* --- Estrutura Principal --- */
+.wrapper {
+    display: flex; /* Coloca a sidebar e o conteúdo lado a lado. */
+    width: 100%;
+    min-height: 100vh; /* ALTURA mínima de 100% da tela. */
+    align-items: stretch;
+}
+
+#main-content-wrapper {
+    flex-grow: 1; /* Faz o conteúdo principal ocupar todo o espaço restante. */
+    display: flex;
+    flex-direction: column;
+}
+
+/* ========================================
+   SIDEBAR - MELHORADA PARA MOBILE
+   ======================================== */
+.sidebar-custom {
+    width: var(--sidebar-width); /* LARGURA definida em :root (250px). */
+    min-width: var(--sidebar-width); /* LARGURA MÍNIMA para não encolher. */
+    background: var(--primary-color);
+    transition: width var(--transition-speed) ease, min-width var(--transition-speed) ease, transform var(--transition-speed) ease;
+    height: 100vh; /* ALTURA total da tela. */
+    position: sticky; /* Mantém a sidebar fixa ao rolar. */
+    top: 0;
+    z-index: 1032;
+    overflow-y: auto; /* Adiciona rolagem se os itens do menu não couberem na ALTURA. */
+    overflow-x: hidden;
+    flex-shrink: 0;
+}
+
+/* Estilo da sidebar quando está recolhida (classe .collapsed) */
+.sidebar-custom.collapsed {
+    width: var(--sidebar-collapsed-width); /* LARGURA definida em :root (80px). */
+    min-width: var(--sidebar-collapsed-width);
+}
+
+/* Cabeçalho da sidebar (onde fica o logo/ícone) */
+.sidebar-header {
+    height: 60px; /* ALTURA fixa do cabeçalho. */
+    padding: 0 1rem; /* ESPAÇAMENTO interno. */
+    display: flex;
+    align-items: center;
+}
+
+/* Botão de expandir/recolher */
+.sidebar-brand-toggle {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    color: var(--text-light);
+    text-decoration: none;
+    padding: .5rem; /* ESPAÇAMENTO interno do botão. */
+    border-radius: var(--border-radius-base);
+    min-height: var(--touch-target-size); /* ALTURA MÍNIMA para toque fácil. */
+}
+.sidebar-brand-toggle:hover {
+    background-color: var(--hover-color);
+}
+
+/* Linha divisória na sidebar */
+.sidebar-divider {
+    border-color: rgba(255,255,255,0.2) !important;
+}
+
+/* Links do menu da sidebar */
+.sidebar-link {
+    color: rgba(255, 255, 255, 0.85);
+    padding: 12px 1rem; /* ESPAÇAMENTO interno (12px em cima/baixo, 1rem nas laterais). */
+    border-radius: var(--border-radius-base);
+    margin: 2px 0;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: background-color 0.2s, color 0.2s, border 0.2s;
+    border: 2px solid transparent;
+    min-height: var(--touch-target-size); /* ALTURA MÍNIMA para toque fácil. */
+}
+
+/* Ícones dentro dos links */
+.sidebar-link .fa-fw {
+    font-size: var(--icon-size-md); /* TAMANHO do ícone (1.25rem). */
+    width: 30px; /* LARGURA fixa para alinhar os textos. */
+    flex-shrink: 0;
+    text-align: center;
+    transition: font-size 0.3s ease;
+}
+
+/* Texto dentro dos links */
+.sidebar-link .sidebar-text {
+    margin-left: 10px; /* ESPAÇAMENTO entre o ícone e o texto. */
+    opacity: 1;
+    transition: opacity 0.2s ease;
+}
+
+/* Esconde o texto quando a sidebar está recolhida */
+.sidebar-custom.collapsed .sidebar-link .sidebar-text,
+.sidebar-custom.collapsed .sidebar-header .sidebar-text {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Centraliza o ícone quando a sidebar está recolhida */
+.sidebar-custom.collapsed .sidebar-link {
+    justify-content: center;
+}
+/* Aumenta o TAMANHO do ícone quando a sidebar está recolhida */
+.sidebar-custom.collapsed .sidebar-link .fa-fw {
+    font-size: var(--icon-size-lg); /* TAMANHO do ícone (1.5rem). */
+}
+.sidebar-custom.collapsed .sidebar-link .sidebar-text {
+    display: none;
+}
+
+/* Efeito ao passar o mouse sobre o link */
+.sidebar-link:hover {
+    background-color: var(--hover-color);
+    color: var(--text-light);
+}
+
+/* Estilo do link ATIVO (página atual) */
+.sidebar-link.active,
+.sidebar-link[aria-expanded="true"] {
+    background-color: var(--hover-color) !important;
+    color: var(--text-light);
+    font-weight: 500;
+    border: 2px solid var(--primary-color); /* BORDA sutil para destaque. */
+}
+
+/* Fundo preto transparente para fechar a sidebar em telas pequenas */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1035;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.sidebar-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* ========================================
+   RESPONSIVIDADE MOBILE MELHORADA
+   ======================================== */
+/* Para telas com LARGURA MÁXIMA de 991.98px (tablets e celulares) */
+@media (max-width: 991.98px) {
+    .sidebar-custom {
+        position: fixed;
+        transform: translateX(-100%); /* Esconde a sidebar fora da tela. */
+        z-index: 1040;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+    /* Classe .active (adicionada via JS) faz a sidebar aparecer */
+    .sidebar-custom.active {
+        transform: translateX(0);
+        width: var(--sidebar-width);
+        min-width: var(--sidebar-width);
+    }
+    .sidebar-custom.collapsed {
+        transform: translateX(-100%);
+    }
+    #main-content-wrapper {
+        padding: var(--mobile-padding); /* Adiciona espaçamento ao redor do conteúdo no mobile. */
+    }
+    .mobile-header {
+        padding: var(--mobile-padding);
+        background: white;
+        border-bottom: 1px solid var(--border-color);
+        position: sticky;
+        top: 0;
+        z-index: 1030;
+    }
+    .mobile-header .btn {
+        min-height: var(--touch-target-size);
+        min-width: var(--touch-target-size);
+    }
+    .tooltip {
+        display: none !important; /* Esconde dicas de ferramentas no mobile. */
+    }
+}
+
+/* Para telas com LARGURA MÁXIMA de 767.98px (celulares maiores) */
+@media (max-width: 767.98px) {
+    :root {
+        --mobile-padding: 0.75rem;
+        --mobile-margin: 0.25rem;
+    }
+    .card-custom {
+        margin-bottom: var(--mobile-margin);
+    }
+    .btn-group-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: var(--mobile-margin);
+    }
+    .btn-group-mobile .btn {
+        width: 100%;
+        min-height: var(--touch-target-size);
+    }
+    .table-responsive-mobile {
+        font-size: 0.875rem; /* Diminui a FONTE da tabela. */
+    }
+    .table-responsive-mobile .btn-group {
+        flex-direction: column;
+        gap: 2px;
+    }
+    .table-responsive-mobile .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+}
+
+/* Para telas com LARGURA MÁXIMA de 575.98px (celulares menores) */
+@media (max-width: 575.98px) {
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        gap: var(--mobile-margin);
+    }
+    .btn-toolbar {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: var(--mobile-margin);
+    }
+    .form-floating-custom .form-control {
+        min-height: var(--touch-target-size);
+        font-size: 16px; /* Evita zoom automático em campos de formulário no iOS. */
+    }
+}
+
+/* ========================================
+   PADRONIZAÇÃO DE ÍCONES
+   ======================================== */
+.icon-sm { font-size: var(--icon-size-sm) !important; }
+.icon-md { font-size: var(--icon-size-md) !important; }
+.icon-lg { font-size: var(--icon-size-lg) !important; }
+.icon-xl { font-size: var(--icon-size-xl) !important; }
+
+.btn .fas, .btn .far, .btn .fab { font-size: var(--icon-size-sm); }
+.btn-sm .fas, .btn-sm .far, .btn-sm .fab { font-size: 0.875rem; }
+.btn-lg .fas, .btn-lg .far, .btn-lg .fab { font-size: var(--icon-size-md); }
+.card-header .fas, .card-header .far, .card-header .fab { font-size: var(--icon-size-md); }
+
+/* ========================================
+   MELHORIAS DE FORMULÁRIOS
+   ======================================== */
+.form-control-custom {
+    min-height: var(--touch-target-size); /* ALTURA MÍNIMA para toque. */
+    border-radius: var(--border-radius-base);
+    border: 1px solid var(--border-color);
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.form-control-custom:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25); /* Efeito de brilho ao focar. */
+}
+.form-label-custom {
+    font-weight: 500;
+    color: var(--text-dark);
+    margin-bottom: 0.5rem;
+}
+.form-label-custom .fas, .form-label-custom .far, .form-label-custom .fab {
+    font-size: var(--icon-size-sm);
+    color: var(--primary-color);
+}
+.form-control.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+.form-control.is-valid {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
+}
+.invalid-feedback, .valid-feedback {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* ========================================
+   MELHORIAS DE SCANNER MOBILE
+   ======================================== */
+.scanner-container-mobile {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+}
+.scanner-video-mobile {
+    width: 100%;
+    height: auto;
+    max-height: 60vh; /* ALTURA MÁXIMA do vídeo do scanner. */
+    border-radius: var(--border-radius-base);
+    background-color: #000;
+}
+/* A "mira" do scanner */
+.scanner-overlay-mobile {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(250px, 60vw); /* LARGURA da mira, 250px ou 60% da tela (o que for menor). */
+    height: min(250px, 60vw); /* ALTURA da mira. */
+    border: 3px solid var(--primary-color);
+    border-radius: var(--border-radius-base);
+    background: rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+.scanner-controls-mobile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--mobile-margin);
+    justify-content: center;
+    margin-top: 1rem;
+}
+.scanner-controls-mobile .btn {
+    min-height: var(--touch-target-size);
+    flex: 1;
+    min-width: 120px;
+}
+@media (max-width: 575.98px) {
+    .scanner-controls-mobile { flex-direction: column; }
+    .scanner-controls-mobile .btn { width: 100%; }
+}
+
+/* ========================================
+   OUTROS ESTILOS MELHORADOS
+   ======================================== */
+.btn-primary-custom {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--text-light);
+    min-height: var(--touch-target-size);
+}
+.btn-primary-custom:hover {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+.text-primary-custom { color: var(--primary-color) !important; }
+.bg-primary-custom { background-color: var(--primary-color) !important; }
+.card-custom {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-base);
+    box-shadow: var(--box-shadow-base);
+}
+.card-header-custom {
+    background-color: #fff;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+.alert-custom {
+    border-radius: var(--border-radius-base);
+}
+#alert-container {
+    position: fixed;
+    top: 80px; /* Distância do topo. */
+    right: 20px; /* Distância da direita. */
+    z-index: 1056;
+    min-width: 300px; /* LARGURA mínima do alerta. */
+}
+@media (max-width: 575.98px) {
+    #alert-container {
+        top: 10px; right: 10px; left: 10px; min-width: auto;
+    }
+}
+.badge-dark-text { color: var(--text-dark) !important; }
+.sidebar-logo {
+    width: 45px; /* LARGURA do logo. */
+    height: 45px; /* ALTURA do logo. */
+    object-fit: contain;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.sidebar-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sidebar-title {
+    font-size: 1.1rem; /* TAMANHO da fonte do título. */
+    font-weight: 500;
+    white-space: nowrap; /* CORRIGIDO: Impede que o texto quebre em várias linhas */
+    overflow: hidden; /* CORRIGIDO: Esconde o texto que ultrapassar o limite do elemento */
+    text-overflow: ellipsis; /* Adiciona "..." ao final do texto cortado */
+}
+/* ========================================
+   AJUSTES ESPECÍFICOS PARA RESOLUÇÕES MOBILE
+   ======================================== */
+@media (max-width: 768px) {
+    body { font-size: 15px; }
+    #main-content-wrapper { padding: 1rem; }
+    .card-custom { margin-bottom: 1rem; }
+    .table-responsive { overflow-x: auto; }
+    .table-responsive table {
+        width: 100%;
+        min-width: 700px; /* LARGURA MÍNIMA da tabela para forçar rolagem horizontal. */
+    }
+    .product-card .card-footer .btn {
+        width: 45px; height: 45px; font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 390px) {
+    body { font-size: 14px; }
+    #main-content-wrapper { padding: 0.5rem; }
+    .sidebar-custom, .sidebar-custom.active {
+        width: 280px; /* LARGURA da sidebar em telas muito pequenas. */
+        min-width: 280px;
+    }
+    .sidebar-link { padding: 10px 0.75rem; }
+    .product-card .card-footer .btn {
+        width: 40px; height: 40px; font-size: 1.1rem;
+    }
+    .d-flex.border-bottom {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    .d-flex.border-bottom h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .d-flex.border-bottom .btn-toolbar,
+    .d-flex.border-bottom .btn-toolbar .btn-group,
+    .d-flex.border-bottom .btn-toolbar .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    .scanner-overlay-mobile {
+        width: min(200px, 50vw);
+        height: min(200px, 50vw);
+    }
+}

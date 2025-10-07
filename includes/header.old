@@ -1,0 +1,166 @@
+<?php
+// ========================================
+// ARQUIVO DE CABEÇALHO HTML (VERSÃO CORRIGIDA E FINAL)
+// ========================================
+require_once 'config.php';
+
+$current_theme = $system_settings['theme_color'] ?? 'blue';
+$logo_path = $system_settings['company_logo'] ?? '';
+?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title><?php echo isset($page_title) ? $page_title . ' - ' . SITE_NAME : SITE_NAME; ?></title>
+    <link rel="icon" type="image/x-icon" href="assets/images/favicon.ico">
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/themes.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="css/custom.css" rel="stylesheet">
+</head>
+<body class="theme-<?php echo htmlspecialchars($current_theme); ?>">
+
+<div class="wrapper">
+    <?php if (isLoggedIn() && !isset($hide_sidebar)): ?>
+        <nav id="sidebar" class="sidebar-custom d-flex flex-column">
+            <div class="sidebar-header">
+                <div onclick="toggleSidebar()" class="sidebar-brand-toggle">
+                    <?php if (!empty($logo_path) && file_exists($logo_path)): ?>
+                        <img src="<?php echo htmlspecialchars($logo_path); ?>" alt="Logo da Empresa" class="sidebar-logo">
+                    <?php else: ?>
+                        <i class="fas fa-warehouse fa-fw fs-4"></i>
+                    <?php endif; ?>
+                    <div class="sidebar-text ms-2">
+                        <span class="sidebar-title"><?php echo SITE_NAME; ?></span>
+                        <?php if (defined('COMPANY_SLOGAN') && !empty(COMPANY_SLOGAN)): ?>
+                            <span class="sidebar-slogan"><?php echo COMPANY_SLOGAN; ?></span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <hr class="text-white-50 mx-2 mt-0">
+            <ul class="nav nav-pills flex-column mb-auto px-2">
+                <li class="nav-item">
+                    <a href="dashboard.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
+                        <i class="fas fa-tachometer-alt fa-fw"></i>
+                        <span class="sidebar-text">Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="products.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Produtos">
+                        <i class="fas fa-boxes fa-fw"></i>
+                        <span class="sidebar-text">Produtos</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="ready_machines.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'ready_machines.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Máquinas">
+                        <i class="fas fa-desktop fa-fw"></i>
+                        <span class="sidebar-text">Máquinas</span>
+                    </a>
+                </li>
+                <hr class="sidebar-divider my-2">
+                <?php 
+                $entrada_pages = ['product_inputs_log.php', 'machine_inputs_log.php'];
+                $saida_pages = ['product_outputs_log.php', 'machine_outputs_log.php'];
+                $is_entrada_page_active = in_array(basename($_SERVER['PHP_SELF']), $entrada_pages);
+                $is_saida_page_active = in_array(basename($_SERVER['PHP_SELF']), $saida_pages);
+                $is_movement_page_active = $is_entrada_page_active || $is_saida_page_active;
+                ?>
+                <li class="nav-item">
+                    <a href="#movements-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_movement_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link <?php echo !$is_movement_page_active ? 'collapsed' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Movimentações">
+                        <i class="fas fa-exchange-alt fa-fw"></i>
+                        <span class="sidebar-text">Movimentações</span>
+                    </a>
+                    <div class="collapse <?php echo $is_movement_page_active ? 'show' : ''; ?>" id="movements-collapse">
+                        <ul class="nav flex-column ms-3">
+                            <li class="nav-item">
+                                <a href="#entradas-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_entrada_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link ps-2 <?php echo !$is_entrada_page_active ? 'collapsed' : ''; ?>">
+                                    <i class="fas fa-arrow-circle-down fa-fw text-success"></i>
+                                    <span class="sidebar-text">Entradas</span>
+                                </a>
+                                <div class="collapse <?php echo $is_entrada_page_active ? 'show' : ''; ?>" id="entradas-collapse">
+                                    <ul class="nav flex-column ms-3">
+                                        <li><a href="product_inputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "product_inputs_log.php" ? "active" : ""; ?>"><i class="fas fa-box fa-fw"></i><span class="sidebar-text">Produtos</span></a></li>
+                                        <li><a href="machine_inputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "machine_inputs_log.php" ? "active" : ""; ?>"><i class="fas fa-desktop fa-fw"></i><span class="sidebar-text">Máquinas</span></a></li>
+                                    </ul>
+                                </div>
+                            </li>
+                            <li class="nav-item">
+                                <a href="#saidas-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_saida_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link ps-2 <?php echo !$is_saida_page_active ? 'collapsed' : ''; ?>">
+                                    <i class="fas fa-arrow-circle-up fa-fw text-danger"></i>
+                                    <span class="sidebar-text">Saídas</span>
+                                </a>
+                                <div class="collapse <?php echo $is_saida_page_active ? 'show' : ''; ?>" id="saidas-collapse">
+                                    <ul class="nav flex-column ms-3">
+                                         <li><a href="product_outputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "product_outputs_log.php" ? "active" : ""; ?>"><i class="fas fa-box fa-fw"></i><span class="sidebar-text">Produtos</span></a></li>
+                                        <li><a href="machine_outputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "machine_outputs_log.php" ? "active" : ""; ?>"><i class="fas fa-desktop fa-fw"></i><span class="sidebar-text">Máquinas</span></a></li>
+                                    </ul>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                <?php if (isAdmin()): ?>
+                    <hr class="sidebar-divider my-2">
+                    <li><a href="users.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Usuários"><i class="fas fa-users fa-fw"></i><span class="sidebar-text">Usuários</span></a></li>
+                    <?php $is_log_page_active = (basename($_SERVER['PHP_SELF']) == 'admin_logs.php'); ?>
+                    <li class="nav-item">
+                        <a href="#logs-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_log_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link <?php echo !$is_log_page_active ? 'collapsed' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Logs"><i class="fas fa-history fa-fw"></i><span class="sidebar-text">Logs</span></a>
+                        <div class="collapse <?php echo $is_log_page_active ? 'show' : ''; ?>" id="logs-collapse">
+                            <ul class="nav flex-column ms-3">
+                                <li><a href="admin_logs.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER['PHP_SELF']) == 'admin_logs.php' ? 'active' : ''; ?>"><i class="fas fa-shield-alt fa-fw"></i><span class="sidebar-text">Sistema</span></a></li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li><a href="settings.php" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Configurações"><i class="fas fa-cogs fa-fw"></i><span class="sidebar-text">Configurações</span></a></li>
+                <?php endif; ?>
+            </ul>
+            <hr class="text-white-50 mx-2">
+            <div class="px-2 pb-3">
+                 <a href="logout.php" class="nav-link sidebar-link" data-bs-toggle="tooltip" data-bs-placement="right" title="Sair"><i class="fas fa-sign-out-alt fa-fw"></i><span class="sidebar-text">Sair</span></a>
+            </div>
+        </nav>
+    <?php endif; ?>
+        
+    <div id="main-content-wrapper" class="d-flex flex-column flex-grow-1">
+        <?php if (isLoggedIn() && !isset($hide_sidebar)): ?>
+        <header class="d-flex justify-content-between align-items-center py-2 px-3 border-bottom bg-light no-print">
+            <button class="btn btn-light d-lg-none" type="button" onclick="toggleMobileSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            
+            <div class="ms-auto">
+                 <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            <?php
+                            $user_avatar = $_SESSION['user_avatar'] ?? '';
+                            $avatar_path = 'uploads/avatars/' . $user_avatar;
+                            $avatar_exists = !empty($user_avatar) && file_exists($avatar_path);
+                            
+                            if ($avatar_exists) {
+                                echo '<img src="' . htmlspecialchars($avatar_path) . '?v=' . time() . '" alt="Avatar" class="rounded-circle me-2" style="width: 24px; height: 24px; object-fit: cover;">';
+                            } else {
+                                echo '<i class="fas fa-user-circle avatar-icon me-2"></i>';
+                            }
+                            ?>
+                            <?php echo htmlspecialchars($_SESSION["username"] ?? "Usuário"); ?>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
+                            <?php if (isAdmin()): ?>
+                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
+                            <?php endif; ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </header>
+        <?php endif; ?>
+        
+        <main class="p-3 p-md-4 flex-grow-1">
+            <div id="alert-container"></div>

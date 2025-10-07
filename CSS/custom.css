@@ -1,0 +1,307 @@
+/* ========================================
+   SISTEMA DE ESTOQUE TI - CSS PERSONALIZADO (VERSÃO CORRIGIDA E COMENTADA)
+   ======================================== */
+
+/* * A seção :root é usada para declarar variáveis CSS globais.
+ * Isso permite que você defina cores, tamanhos e outros valores em um só lugar
+ * e os reutilize em todo o arquivo, facilitando a manutenção do tema.
+*/
+:root {
+    /* --- Paleta de Cores Principal --- */
+    --primary-color: #0d6efd; /* Azul principal usado em botões, links e na sidebar. */
+    --primary-dark: #0a58ca; /* Tom mais escuro do azul, usado para efeitos :hover (passar o mouse). */
+    --primary-light: #3b82f6; /* Tom mais claro do azul, usado para links ativos na sidebar. */
+    --secondary-color: #6c757d; /* Cinza secundário, para botões e elementos de menor destaque. */
+    --accent-color: #ffffff; /* Cor de destaque, aqui definida como branco, usada em bordas e textos. */
+    
+    /* --- Cores de Fundo e Texto --- */
+    --light-bg: #f8f9fa; /* Fundo principal da página (cinza bem claro). */
+    --text-light: #ffffff; /* Cor do texto para fundos escuros (branco). */
+    --text-dark: #212529; /* Cor do texto para fundos claros (preto/cinza escuro). */
+    
+    /* --- Cores de Bordas e Efeitos --- */
+    --border-color: #e9ecef; /* Cor para bordas de cards e divisórias. */
+    --hover-color: rgba(255, 255, 255, 0.1); /* Efeito de sobreposição ao passar o mouse na sidebar (branco com transparência). */
+    --active-color: #0b5ed7; /* Cor para links ativos. */
+    
+    /* --- Estilos de Layout e Tamanho --- */
+    --border-radius-base: 0.375rem; /* Raio do arredondamento das bordas de botões e cards. */
+    --box-shadow-base: 0 4px 15px rgba(0, 0, 0, 0.07); /* Sombra padrão para cards, para dar profundidade. */
+    
+    /* --- Dimensões da Sidebar (Menu Lateral) --- */
+    --sidebar-width: 170px; /* Largura da sidebar quando ela está expandida. */
+    --sidebar-collapsed-width: 80px; /* Largura da sidebar quando está recolhida (minimazada). */
+    
+    /* --- Animações --- */
+    --transition-speed: 0.3s; /* Velocidade das animações (ex: abrir/fechar sidebar). */
+}
+
+/* * Estilo base para o corpo (body) da página.
+*/
+body {
+    background-color: var(--light-bg); /* Define a cor de fundo da página. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* Define a fonte padrão. */
+    color: var(--text-dark); /* Define a cor do texto padrão. */
+    overflow-x: hidden; /* Esconde a barra de rolagem horizontal para evitar que a página "vaze" para os lados. */
+}
+
+/*
+ * 'Wrapper' é o contêiner principal que envolve a sidebar e o conteúdo.
+ * O 'display: flex' organiza a sidebar e o conteúdo lado a lado.
+*/
+.wrapper {
+    display: flex; /* Ativa o layout flexbox. */
+    width: 100%; /* Ocupa 100% da largura da tela. */
+    min-height: 100vh; /* Altura mínima de 100% da tela. */
+    align-items: stretch; /* Faz com que os itens internos (sidebar e conteúdo) tenham a mesma altura. */
+}
+
+/*
+ * Contêiner do conteúdo principal (à direita da sidebar).
+*/
+#main-content-wrapper {
+    flex-grow: 1; /* Permite que este elemento cresça e ocupe o espaço restante. */
+    display: flex; /* Ativa o flexbox para organização interna. */
+    flex-direction: column; /* Organiza o conteúdo interno em coluna (um abaixo do outro). */
+    overflow: auto; /* Adiciona barra de rolagem se o conteúdo for maior que a tela. */
+    min-width: 0; /* Previne que o conteúdo flexível cause overflow. */
+}
+
+/* ========================================
+   SIDEBAR (Menu Lateral Esquerdo)
+   ======================================== */
+.sidebar-custom {
+    width: var(--sidebar-width); /* Largura da sidebar (150px). */
+    min-width: var(--sidebar-width); /* Largura mínima, para evitar que encolha. */
+    background: var(--primary-color); /* Cor de fundo da sidebar (azul). */
+    transition: width var(--transition-speed) ease, min-width var(--transition-speed) ease, transform var(--transition-speed) ease; /* Animação suave ao abrir/fechar. */
+    height: 100vh; /* Altura total da tela. */
+    position: sticky; /* Mantém a sidebar fixa no lugar ao rolar a página. */
+    top: 0; /* Cola a sidebar no topo. */
+    z-index: 1032; /* Garante que a sidebar fique acima de outros elementos. */
+    overflow-x: hidden; /* Esconde a rolagem horizontal interna. */
+    flex-shrink: 0; /* Impede que a sidebar encolha. */
+}
+
+/* Estilo da sidebar quando está recolhida. */
+.sidebar-custom.collapsed {
+    width: var(--sidebar-collapsed-width); /* Largura quando recolhida (80px). */
+    min-width: var(--sidebar-collapsed-width); /* Largura mínima quando recolhida. */
+}
+
+/* Cabeçalho da sidebar (onde fica o logo/nome). */
+.sidebar-header {
+    padding: 0; /* Remove preenchimento. */
+    height: auto; /* Altura automática. */
+}
+
+/* Botão que expande/recolhe a sidebar. */
+.sidebar-brand-toggle {
+    cursor: pointer; /* Muda o cursor para uma "mãozinha". */
+    width: 100%; /* Ocupa toda a largura do cabeçalho. */
+    color: var(--text-light); /* Cor do texto (branco). */
+    text-decoration: none; /* Remove sublinhado. */
+    min-height: 50px; /* Altura mínima. */
+    display: flex; /* Ativa flexbox. */
+    align-items: center; /* Centraliza verticalmente. */
+    justify-content: center; /* Centraliza horizontalmente. */
+    position: relative; /* Posição relativa para elementos internos. */
+    transition: min-height var(--transition-speed) ease; /* Animação da altura. */
+}
+.sidebar-brand-toggle:hover {
+    background-color: var(--hover-color); /* Efeito ao passar o mouse. */
+}
+
+/*
+ * Lógica para mostrar/esconder o logo/texto quando a sidebar é recolhida.
+*/
+.sidebar-brand-collapsed {
+    display: none; /* Escondido por padrão. */
+    opacity: 0; /* Totalmente transparente. */
+}
+.sidebar-brand-expanded {
+    display: block; /* Visível por padrão. */
+    opacity: 1; /* Totalmente opaco. */
+}
+.sidebar-custom.collapsed .sidebar-brand-toggle {
+    min-height: 80px; /* Aumenta a altura do botão quando recolhido para centralizar o ícone. */
+}
+.sidebar-custom.collapsed .sidebar-brand-expanded {
+    display: none; /* Esconde a versão expandida. */
+    opacity: 0;
+}
+.sidebar-custom.collapsed .sidebar-brand-collapsed {
+    display: block; /* Mostra a versão recolhida. */
+    opacity: 1;
+}
+
+/* Linha divisória dentro da sidebar. */
+.sidebar-divider {
+    border-color: rgba(255,255,255,0.2) !important; /* Cor da linha (branca com transparência). */
+}
+
+/* Links (itens de menu) da sidebar. */
+.sidebar-link {
+    color: rgba(255, 255, 255, 0.85); /* Cor do texto dos links. */
+    padding: 0.80rem 0.08rem; /* Preenchimento interno (vertical e horizontal). */
+    border-radius: var(--border-radius-base); /* Bordas arredondadas. */
+    margin: 2px 0; /* Margem entre os links. */
+    display: flex; /* Ativa flexbox. */
+    align-items: center; /* Alinha o ícone e o texto verticalmente. */
+    white-space: nowrap; /* Impede que o texto quebre em duas linhas. */
+    overflow: hidden; /* Esconde o que não couber. */
+    transition: all 0.2s ease-in-out; /* Animação suave para todas as propriedades. */
+    border-left: 4px solid transparent; /* Borda esquerda para indicar item ativo. */
+}
+
+/* Ícones dentro dos links da sidebar (Font Awesome). */
+.sidebar-link .fa-fw {
+    font-size: 1.45rem; /* Tamanho do ícone. */
+    width: 12px; /* Largura fixa. */
+    flex-shrink: 0; /* Não permite que o ícone encolha. */
+    text-align: center; /* Centraliza o ícone. */
+    margin-right: 20px; /* Espaçamento à direita do ícone. */
+    transition: font-size 0.3s ease; /* Animação do tamanho. */
+}
+
+/* Texto dos links da sidebar. */
+.sidebar-link .sidebar-text {
+    margin-left: 0; /* Remove margem. */
+    opacity: 1; /* Visível por padrão. */
+    transition: opacity 0.2s ease; /* Animação de opacidade. */
+}
+
+/* Esconde o texto quando a sidebar está recolhida. */
+.sidebar-custom.collapsed .sidebar-text {
+    display: none;
+    opacity: 0;
+    pointer-events: none; /* Impede que o texto invisível seja clicável. */
+}
+
+/* Ajustes nos links quando a sidebar está recolhida. */
+.sidebar-custom.collapsed .sidebar-link {
+    justify-content: center; /* Centraliza o ícone. */
+    padding: 12px; /* Ajusta o preenchimento. */
+    width: auto;
+    height: auto;
+    margin: 10px auto; /* Centraliza o "botão" do link. */
+    border-left: 1px solid transparent; /* Remove a borda lateral. */
+}
+/* Aumenta o tamanho do ícone quando a sidebar está recolhida. */
+.sidebar-custom.collapsed .sidebar-link .fa-fw {
+    font-size: 1.70em;
+    width: auto;
+    margin-right: 0; /* Remove a margem. */
+}
+
+/* Efeito ao passar o mouse sobre um link. */
+.sidebar-link:hover {
+    background-color: var(--hover-color);
+    color: var(--text-light);
+}
+
+/* Estilo do link da página atual (ativo). */
+.sidebar-link.active,
+.sidebar-link[aria-expanded="true"] {
+    background-color: var(--primary-light) !important; /* Fundo azul claro. */
+    color: var(--text-light); /* Texto branco. */
+    font-weight: 500; /* Texto em negrito. */
+    border-left-color: var(--accent-color, #0ea5e9); /* Borda lateral branca. */
+}
+
+/* Estilo do link ativo quando a sidebar está recolhida. */
+.sidebar-custom.collapsed .sidebar-link.active,
+.sidebar-custom.collapsed .sidebar-link[aria-expanded="true"] {
+    background-color: var(--primary-light) !important; /* Fundo azul claro. */
+    border-radius: 20%; /* Deixa o fundo mais arredondado. */
+    border-left-color: transparent; /* Remove a borda lateral. */
+}
+
+/* ========================================
+   OUTROS ESTILOS GERAIS
+   ======================================== */
+.btn-primary-custom { background-color: var(--primary-color); border-color: var(--primary-color); color: var(--text-light); }
+.btn-primary-custom:hover { background-color: var(--primary-dark); border-color: var(--primary-dark); }
+.btn-secondary-custom { background-color: var(--secondary-color); border-color: var(--secondary-color); color: var(--text-light); }
+.btn-secondary-custom:hover { background-color: #5a6268; border-color: #545b62; color: var(--text-light); }
+.text-primary-custom { color: var(--primary-color) !important; }
+
+/* Estilo padrão para os cards. */
+.card-custom { border: 1px solid var(--border-color); border-radius: var(--border-radius-base); box-shadow: var(--box-shadow-base); }
+/* Estilo para o cabeçalho dos cards. */
+.card-header-custom { background-color: #fff; border-bottom: 1px solid var(--border-color); font-weight: 600; color: var(--primary-dark); }
+/* Contêiner para alertas (pop-ups de sucesso/erro). */
+#alert-container { position: fixed; top: 80px; right: 20px; z-index: 1056; min-width: 300px; }
+
+/* Logo da empresa no cabeçalho superior. */
+.navbar-brand-logo img {
+  height: 40px; /* Altura da imagem. */
+  max-width: 150px; /* Largura máxima. */
+  object-fit: contain; /* Garante que a imagem caiba sem distorcer. */
+}
+    
+/* Título da empresa na sidebar. */
+.sidebar-title {
+    font-size: 1.2rem; /* Tamanho da fonte. */
+    font-weight: 500; /* Peso da fonte. */
+    color: var(--accent-color, #0ea5e9); /* Cor do texto (branco). */
+    white-space: nowrap; /* Impede quebra de linha. */
+    overflow: hidden; /* Esconde o que não couber. */
+    text-overflow: ellipsis; /* Adiciona "..." se o texto for muito longo. */
+}
+
+/* Slogan da empresa na sidebar. */
+.sidebar-slogan {
+    font-size: 0.8rem; /* Tamanho da fonte. */
+    font-weight: 300; /* Peso da fonte. */
+    color: var(--accent-color, #0ea5e9); /* Cor do texto (branco). */
+    opacity: 0.8; /* Levemente transparente. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Imagem do produto nos cards da página de produtos. */
+.product-card .card-img-top {
+    height: 180px; /* Altura fixa para a imagem. */
+    width: 100%; /* Largura total do card. */
+    object-fit: contain; /* Garante que a imagem inteira apareça sem distorção. */
+    padding: 0.5rem; /* Pequeno espaçamento interno. */
+    background-color: #fdfdfd; /* Fundo branco para a imagem. */
+}
+/* Efeito de transição nos cards de produto. */
+.product-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+/* Efeito ao passar o mouse sobre o card: ele "levanta" e ganha uma sombra mais forte. */
+.product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* ========================================
+   RESPONSIVIDADE (Ajustes para Telas Menores)
+   ======================================== */
+@media (max-width: 991.98px) {
+    /* Estilos aplicados em telas com largura máxima de 991.98px (tablets e celulares). */
+    .sidebar-custom {
+        position: fixed; /* Muda a sidebar para uma posição fixa (flutuante). */
+        left: 0;
+        top: 0;
+        transform: translateX(-100%); /* Esconde a sidebar para fora da tela à esquerda. */
+        z-index: 1040; /* Garante que fique acima do conteúdo. */
+    }
+    .sidebar-custom.collapsed {
+        transform: translateX(-100%); /* Garante que ela continue escondida mesmo no modo recolhido. */
+        width: var(--sidebar-width);
+        min-width: var(--sidebar-width);
+    }
+    /* Quando a classe 'show' é adicionada (via JavaScript), a sidebar desliza para dentro da tela. */
+    .sidebar-custom.show {
+        transform: translateX(0);
+        box-shadow: 0 0 1rem rgba(0,0,0,.15);
+    }
+    .sidebar-custom.collapsed.show {
+        transform: translateX(0);
+    }
+}

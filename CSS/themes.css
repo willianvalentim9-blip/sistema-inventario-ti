@@ -1,0 +1,134 @@
+/* ========================================
+   DEFINIÇÃO DOS TEMAS DO SISTEMA (VERSÃO CORRIGIDA FINAL)
+   ======================================== */
+
+/* Tema Azul (Padrão) */
+.theme-blue { --primary-color: #0d6efd; --primary-dark: #0a58ca; --primary-light: #3b82f6; }
+/* Tema Verde */
+.theme-green { --primary-color: #198754; --primary-dark: #157347; --primary-light: #22c55e; }
+/* Tema Vermelho */
+.theme-red { --primary-color: #dc3545; --primary-dark: #b02a37; --primary-light: #ef4444; }
+/* Tema Roxo */
+.theme-purple { --primary-color: #6f42c1; --primary-dark: #59359a; --primary-light: #8b5cf6; }
+
+
+/* ========================================
+   TEMA AZUL ESCURO (DARK MODE)
+   ======================================== */
+.theme-dark_blue {
+    --primary-color: #3b82f6;
+    --primary-dark: #2563eb;
+    --primary-light: #60a5fa;
+    --secondary-color: #9ca3af;
+    
+    /* Cores de fundo */
+    --light-bg: #111827;
+    --bs-body-bg: #111827;
+    --bs-tertiary-bg: #1f2937;
+    --bs-secondary-bg: #374151;
+    
+    /* Cores de texto */
+    --text-dark: #e5e7eb;
+    --bs-body-color: #e5e7eb;
+    --bs-heading-color: #f9fafb;
+    --bs-secondary-color: #9ca3af;
+    
+    /* Cores de borda */
+    --border-color: #374151;
+    --bs-border-color: #374151;
+    --bs-border-color-translucent: rgba(255, 255, 255, 0.15);
+    
+    /* Cores de header */
+    --bs-light: #1f2937; 
+    --bs-light-rgb: 31, 41, 55;
+}
+
+
+/* ========================================
+   AJUSTES GERAIS PARA O TEMA ESCURO
+   ======================================== */
+
+.theme-dark_blue .sidebar-custom {
+    background: linear-gradient(135deg, #1f2937, #111827) !important;
+    border-right: 1px solid var(--border-color);
+}
+
+.theme-dark_blue .sidebar-link.active,
+.theme-dark_blue .sidebar-link[aria-expanded="true"] {
+    border-color: var(--primary-color);
+}
+
+.theme-dark_blue .card-header-custom {
+    background-color: var(--bs-tertiary-bg);
+    color: var(--bs-heading-color);
+    border-bottom-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .card-custom {
+    background-color: var(--bs-tertiary-bg);
+    border-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .table-header-custom {
+    background-color: #374151 !important;
+    color: #f9fafb;
+}
+
+.theme-dark_blue .table {
+    --bs-table-color: var(--bs-body-color);
+    --bs-table-striped-color: var(--bs-body-color);
+    --bs-table-active-color: var(--bs-body-color);
+    --bs-table-hover-color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .table-hover>tbody>tr:hover>* {
+    --bs-table-bg-state: rgba(255, 255, 255, 0.075);
+}
+
+.theme-dark_blue .table a {
+    color: var(--primary-light);
+}
+.theme-dark_blue .table a:hover {
+    color: var(--text-light);
+}
+
+/* ========================================
+   *** CORREÇÃO DEFINITIVA PARA TEXTO PRETO ***
+   ======================================== */
+.theme-dark_blue .text-dark {
+    color: var(--bs-body-color) !important;
+}
+
+/* ========================================
+   ESTILOS PARA FORMULÁRIOS E MODAIS
+   ======================================== */
+
+.theme-dark_blue .form-control, 
+.theme-dark_blue .form-select {
+    background-color: #374151;
+    color: #f9fafb;
+    border-color: #4b5563;
+}
+
+.theme-dark_blue .form-control:focus, 
+.theme-dark_blue .form-select:focus {
+    background-color: #374151;
+    color: #f9fafb;
+    border-color: var(--primary-color);
+}
+
+.theme-dark_blue .modal-content {
+    background-color: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .modal-header,
+.theme-dark_blue .modal-footer {
+    border-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .btn-close {
+    filter: invert(1) grayscale(100) brightness(200%);
+}
