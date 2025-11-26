@@ -309,5 +309,3 @@ function getTimelineData($days = 30) {
         return ['dates' => [], 'products' => [], 'machines' => []];
     }
 }
-?>
-

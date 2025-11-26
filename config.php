@@ -180,4 +180,3 @@ if (!empty($output)) {
     // Apenas loga, mas não exibe para não quebrar respostas JSON
     error_log("Saída inesperada em config.php: " . $output);
 }
-?>

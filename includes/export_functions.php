@@ -343,5 +343,3 @@ if (basename($_SERVER['PHP_SELF']) === 'export_functions.php') {
     requireLogin();
     handleExport();
 }
-?>
-
