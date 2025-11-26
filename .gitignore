@@ -1,0 +1,6 @@
+uploads/**/*.png
+uploads/**/*.jpg
+uploads/**/*.jpeg
+assets/uploads/**/*.png
+assets/uploads/**/*.jpg
+assets/uploads/**/*.jpeg
