@@ -1,4 +1,4 @@
-<<?php
+<?php
 // ========================================
 // PÁGINA DE SCANNER DEDICADA PARA MODAL (GERADO A PARTIR DO SCANNER HÍBRIDO)
 // ========================================

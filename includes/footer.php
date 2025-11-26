@@ -27,7 +27,7 @@
     </div>
 </div>
 
-<div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="true">
+<div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -76,6 +76,31 @@
 </div>
 
 
+<style>
+/* CSS para permitir modais empilhados (scanner sobre modal de edição) */
+#actionModal {
+    z-index: 1055; /* Modal de edição/ação (base) */
+}
+
+#actionModal + .modal-backdrop {
+    z-index: 1054; /* Backdrop do actionModal */
+}
+
+#scannerModal {
+    z-index: 1060; /* Modal do scanner (acima de tudo) */
+}
+
+#scannerModal + .modal-backdrop,
+.modal-backdrop:nth-of-type(2) {
+    z-index: 1059; /* Backdrop do scanner entre os modais */
+}
+
+/* Garante que múltiplos backdrops sejam exibidos corretamente */
+body.modal-open {
+    overflow: hidden !important;
+}
+</style>
+
 <script src="js/bootstrap.bundle.min.js"></script>
 <script src="js/custom.js"></script>
 <script src="js/enhanced_ui.js"></script>
@@ -114,61 +139,104 @@
             }
         }
 
-        // --- SCRIPT GLOBAL E CORRIGIDO PARA O SCANNER MODAL ---
+        // --- SCRIPT GLOBAL PARA O SCANNER MODAL (SUPORTE A MODAIS EMPILHADOS) ---
         const scannerModalEl = document.getElementById('scannerModal');
         const actionModalEl = document.getElementById('actionModal');
 
-        if (scannerModalEl && actionModalEl) {
+        if (scannerModalEl) {
             const scannerIframe = document.getElementById('scannerIframe');
+            let scannerModalInstance = null;
 
-            scannerModalEl.addEventListener('show.bs.modal', function(event) {
-                const button = event.relatedTarget;
+            // Event listener global para todos os botões com data-open-scanner
+            document.addEventListener('click', function(event) {
+                const button = event.target.closest('[data-open-scanner]');
+                if (!button) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+
                 const targetInputId = button.getAttribute('data-target-input');
+                if (!targetInputId) {
+                    console.error('Atributo data-target-input não encontrado no botão do scanner');
+                    return;
+                }
+
+                // Carrega o iframe com o target input
                 if (scannerIframe) {
                     scannerIframe.src = `scanner_modal.php?target=${targetInputId}`;
                 }
+
+                // Cria/pega a instância do modal e abre programaticamente
+                // Isso NÃO fecha outros modais abertos
+                scannerModalInstance = bootstrap.Modal.getOrCreateInstance(scannerModalEl, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+                scannerModalInstance.show();
             });
 
-            // Disparado quando o modal do scanner começa a fechar
-            scannerModalEl.addEventListener('hide.bs.modal', function (event) {
-                // Se houver outro modal visível, removemos o backdrop deste modal
-                // para que o Bootstrap não remova o backdrop do modal de baixo.
-                if (document.querySelector('.modal.show')) {
-                    scannerModalEl.removeAttribute('data-bs-backdrop');
+            // Quando o scanner modal fecha
+            scannerModalEl.addEventListener('hide.bs.modal', function(event) {
+                // Verifica se há outros modais abertos
+                const otherModals = document.querySelectorAll('.modal.show:not(#scannerModal)');
+
+                if (otherModals.length > 0) {
+                    // Previne que o Bootstrap remova a classe modal-open do body
+                    setTimeout(() => {
+                        if (!document.body.classList.contains('modal-open')) {
+                            document.body.classList.add('modal-open');
+                        }
+                        document.body.style.overflow = 'hidden';
+                        document.body.style.paddingRight = '';
+                    }, 10);
                 }
             });
 
-            // Disparado DEPOIS que o modal do scanner fechou
+            // Depois que o scanner modal fecha completamente
             scannerModalEl.addEventListener('hidden.bs.modal', function() {
+                // Limpa o iframe
                 if (scannerIframe) {
                     scannerIframe.src = '';
                 }
-                // Garante que o body mantenha o estado correto se outro modal ainda estiver aberto.
-                const isAnotherModalOpen = document.querySelector('.modal.show');
-                if (isAnotherModalOpen) {
+
+                // Garante que o body mantenha o estado correto se outro modal ainda estiver aberto
+                const otherModals = document.querySelectorAll('.modal.show');
+                if (otherModals.length > 0) {
                     document.body.classList.add('modal-open');
                     document.body.style.overflow = 'hidden';
+
+                    // Remove apenas backdrops extras (do scanner)
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 1) {
+                        backdrops[backdrops.length - 1].remove();
+                    }
                 }
-                // Restaura o atributo de backdrop para a próxima vez que o modal for aberto.
-                scannerModalEl.setAttribute('data-bs-backdrop', 'true');
             });
 
             // Função global para receber o código do iframe do scanner
             window.setScannedCode = function(code, targetId) {
                 const targetInput = document.getElementById(targetId);
-                const scannerModalInstance = bootstrap.Modal.getInstance(scannerModalEl);
 
                 if (targetInput) {
                     targetInput.value = code;
-                    targetInput.focus();
+
+                    // Dispara eventos para validações
+                    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    targetInput.dispatchEvent(new Event('change', { bubbles: true }));
                 }
 
-                // Fecha apenas o modal do scanner
+                // Fecha o modal do scanner
                 if (scannerModalInstance) {
                     scannerModalInstance.hide();
                 }
-            };
 
+                // Foca no campo que recebeu o valor
+                setTimeout(() => {
+                    if (targetInput) {
+                        targetInput.focus();
+                    }
+                }, 300);
+            };
         }
 
         // --- SCRIPT PARA O MODAL DE ENTRADA EXPRESSA ---

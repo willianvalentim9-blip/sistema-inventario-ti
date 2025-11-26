@@ -175,7 +175,7 @@ if (!$is_modal) {
             <h5 class="text-primary-custom mb-3"><i class="fas fa-qrcode me-2"></i>Códigos e Estoque</h5>
             <div class="mb-3">
                 <label for="serial_number" class="form-label form-label-custom"><i class="fas fa-hashtag me-1"></i>Nº de Série</label>
-                <input type="text" class="form-control form-control-custom" id="serial_number" name="serial_number" value="<?php echo htmlspecialchars($product['serial_number']); ?>">
+                <input type="text" class="form-control form-control-custom" id="serial_number" name="serial_number" value="<?php echo htmlspecialchars($product['serial_number'] ?? ''); ?>">
             </div>
             <div class="mb-3">
                 <label for="barcode" class="form-label form-label-custom"><i class="fas fa-barcode me-1"></i>Código de Barras</label>
@@ -184,7 +184,7 @@ if (!$is_modal) {
                     <button class="btn btn-outline-secondary" type="button" onclick="generateBarcode()" data-bs-toggle="tooltip" title="Gerar código automaticamente">
                         <i class="fas fa-magic"></i>
                     </button>
-                    <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#scannerModal" data-target-input="barcode">
+                    <button class="btn btn-outline-primary" type="button" data-open-scanner data-target-input="barcode" title="Escanear código de barras">
                         <i class="fas fa-camera"></i>
                     </button>
                 </div>
@@ -196,7 +196,7 @@ if (!$is_modal) {
                     <button class="btn btn-outline-secondary" type="button" onclick="generateQRCode()" data-bs-toggle="tooltip" title="Gerar código QR automaticamente">
                         <i class="fas fa-magic"></i>
                     </button>
-                    <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#scannerModal" data-target-input="qr_code">
+                    <button class="btn btn-outline-primary" type="button" data-open-scanner data-target-input="qr_code" title="Escanear QR code">
                         <i class="fas fa-camera"></i>
                     </button>
                 </div>
