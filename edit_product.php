@@ -121,6 +121,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['flash_message'] = 'Produto atualizado com sucesso!';
         $_SESSION['flash_type'] = 'success';
         
+        // Se for requisição modal, redirecionar para warranties.php
+        if ($is_modal) {
+            header('Location: warranties.php');
+            exit();
+        }
+        
         // Redireciona de volta para a lista de produtos
         header('Location: products.php');
         exit();
@@ -291,11 +297,10 @@ if (!$is_modal) {
                             <strong>Com Garantia</strong>
                         </label>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-info" id="editProductWarrantyBtn" 
-                            <?php echo ($product['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?> 
-                            data-bs-toggle="modal" data-bs-target="#warrantyModalProductEdit">
+                    <a href="warranties.php" class="btn btn-sm btn-outline-info" id="editProductWarrantyBtn" 
+                       <?php echo ($product['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?>>
                         <i class="fas fa-shield-alt me-1"></i>Editar Garantia
-                    </button>
+                    </a>
                 </div>
                 
                 <!-- CAMPOS OCULTOS DE GARANTIA -->
@@ -327,6 +332,8 @@ if (!$is_modal) {
 
 <?php 
 if (!$is_modal) { 
+    // Include modal apenas quando não estiver em modo modal
+    // Senão o modal será editado em warranties.php
     $GLOBALS['is_inside_product_form'] = true;
     include 'includes/warranty_modal_edit_inline.php'; 
     include 'includes/footer.php'; 
@@ -352,85 +359,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Modal de garantia para edição
-    const warrantyModalEdit = document.getElementById('warrantyModalProductEdit');
-    if (warrantyModalEdit) {
-        warrantyModalEdit.addEventListener('show.bs.modal', function() {
-            // Carrega dados do formulário para o modal
-            const fields = ['warranty_provider', 'invoice_number', 'warranty_start_date', 'warranty_period_value', 'warranty_period_unit', 'warranty_end_date', 'warranty_notes'];
-            
-            fields.forEach(field => {
-                const editField = document.getElementById('edit_' + field);
-                const modalField = document.getElementById('product_' + field);
-                
-                if (editField && modalField) {
-                    modalField.value = editField.value;
-                }
-            });
-
-            const modal = document.getElementById('warrantyModalProduct');
-            if (modal) {
-                const toggle = document.getElementById('product_has_warranty');
-                if (toggle) {
-                    toggle.checked = hasWarrantyCheckbox.checked;
-                }
-            }
-        });
-    }
-
-    // Sincronizar dados ao fechar o modal
-    if (warrantyModalEdit) {
-        warrantyModalEdit.addEventListener('hidden.bs.modal', function() {
-            const fields = ['warranty_provider', 'invoice_number', 'warranty_start_date', 'warranty_period_value', 'warranty_period_unit', 'warranty_end_date', 'warranty_notes'];
-            
-            fields.forEach(field => {
-                const editField = document.getElementById('edit_' + field);
-                const modalField = document.getElementById('product_' + field);
-                
-                if (editField && modalField) {
-                    editField.value = modalField.value;
-                }
-            });
-
-            // Atualizar resumo
-            updateWarrantySummaryEdit();
-        });
-    }
-
-    window.updateWarrantySummaryEdit = function() {
-        const provider = document.getElementById('edit_warranty_provider').value;
-        const periodValue = document.getElementById('edit_warranty_period_value').value;
-        const periodUnit = document.getElementById('edit_warranty_period_unit').value;
-        const endDate = document.getElementById('edit_warranty_end_date').value;
-
-        if (provider) {
-            document.getElementById('summary-provider-edit').textContent = provider;
-        }
-        if (periodValue && periodUnit) {
-            document.getElementById('summary-period-edit').textContent = `${periodValue} ${periodUnit}`;
-        }
-        if (endDate) {
-            const dateObj = new Date(endDate);
-            document.getElementById('summary-end-edit').textContent = dateObj.toLocaleDateString('pt-BR');
-        }
-    };
-});
-</script>
-
-<script>
-// ==================================================================
-// ⭐️ AJUSTE 2 (JS): REMOVIDO O 'addEventListener' DE SUBMIT
-// ==================================================================
-
-// O script de 'submit' (fetch) foi removido.
-// O formulário agora será enviado da forma tradicional (HTML),
-// permitindo que o PHP faça o redirecionamento.
-
-// Scripts que *NÃO* são de submit (como upload de imagem e gerador de código)
-// devem permanecer.
-
-document.addEventListener('DOMContentLoaded', function() {
-
     // Setup do Upload de Imagem (continua igual)
     if (typeof setupImageUpload === 'function') {
         setupImageUpload({
@@ -447,8 +375,6 @@ document.addEventListener('DOMContentLoaded', function() {
             itemId: <?php echo $product_id; ?>
         });
     }
-
-    // O 'submit' listener FOI REMOVIDO DAQUI
 });
 
 // Funções de Gerar Código (continuam iguais)

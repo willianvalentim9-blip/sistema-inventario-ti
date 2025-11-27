@@ -76,6 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['flash_message'] = 'Maquina atualizada com sucesso!';
         $_SESSION['flash_type'] = 'success';
         
+        // Se for requisição modal, redirecionar para warranties.php
+        if ($is_modal) {
+            header('Location: warranties.php');
+            exit();
+        }
+        
         header('Location: ready_machines.php');
         exit();
 
@@ -169,11 +175,10 @@ $image_exists = !empty($machine['image']) && file_exists($image_path);
                             <strong>Com Garantia</strong>
                         </label>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-info" id="editMachineWarrantyBtn" 
-                            <?php echo ($machine['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?> 
-                            data-bs-toggle="modal" data-bs-target="#warrantyModalMachineEdit">
+                    <a href="warranties.php" class="btn btn-sm btn-outline-info" id="editMachineWarrantyBtn" 
+                       <?php echo ($machine['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?>>
                         <i class="fas fa-shield-alt me-1"></i>Editar Garantia
-                    </button>
+                    </a>
                 </div>
                 
                 <!-- CAMPOS OCULTOS DE GARANTIA -->
@@ -229,64 +234,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (hasWarrantyCheckbox) {
         hasWarrantyCheckbox.addEventListener('change', function() {
             if (this.checked) {
-                editWarrantyBtn.style.display = 'inline-block';
+                if (editWarrantyBtn) {
+                    editWarrantyBtn.style.display = 'inline-block';
+                }
                 warrantySummaryEdit.classList.remove('d-none');
             } else {
-                editWarrantyBtn.style.display = 'none';
+                if (editWarrantyBtn) {
+                    editWarrantyBtn.style.display = 'none';
+                }
                 warrantySummaryEdit.classList.add('d-none');
             }
         });
     }
-
-    // Modal de garantia para edicao
-    const warrantyModalEdit = document.getElementById('warrantyModalMachineEdit');
-    if (warrantyModalEdit) {
-        warrantyModalEdit.addEventListener('show.bs.modal', function() {
-            // Carrega dados do formulario para o modal
-            const fields = ['warranty_provider', 'warranty_period_value', 'warranty_period_unit'];
-            
-            fields.forEach(field => {
-                const editField = document.getElementById('edit_' + field);
-                const modalField = document.getElementById('machine_' + field);
-                
-                if (editField && modalField) {
-                    modalField.value = editField.value;
-                }
-            });
-        });
-    }
-
-    // Sincronizar dados ao fechar o modal
-    if (warrantyModalEdit) {
-        warrantyModalEdit.addEventListener('hidden.bs.modal', function() {
-            const fields = ['warranty_provider', 'warranty_period_value', 'warranty_period_unit'];
-            
-            fields.forEach(field => {
-                const editField = document.getElementById('edit_' + field);
-                const modalField = document.getElementById('machine_' + field);
-                
-                if (editField && modalField) {
-                    editField.value = modalField.value;
-                }
-            });
-
-            // Atualizar resumo
-            updateWarrantySummaryMachine();
-        });
-    }
-
-    window.updateWarrantySummaryMachine = function() {
-        const provider = document.getElementById('edit_warranty_provider').value;
-        const periodValue = document.getElementById('edit_warranty_period_value').value;
-        const periodUnit = document.getElementById('edit_warranty_period_unit').value;
-
-        if (provider) {
-            document.getElementById('summary-provider-machine').textContent = provider;
-        }
-        if (periodValue && periodUnit) {
-            document.getElementById('summary-period-machine').textContent = `${periodValue} ${periodUnit}`;
-        }
-    };
 
     // A funcao setupImageUpload do seu custom.js original sera chamada para este formulario.
     setupImageUpload({
@@ -302,8 +261,6 @@ document.addEventListener('DOMContentLoaded', function() {
         itemType: 'machine',
         itemId: <?php echo $machine_id; ?>
     });
-
-    // O 'submit' listener FOI REMOVIDO DAQUI
 });
 
 // Funcoes de Gerar Codigo (continuam iguais)
@@ -326,8 +283,10 @@ function generateQRCode() {
 </script>
 
 <?php 
+// Modal de garantia removido - agora abre diretamente em warranties.php
+// include 'includes/warranty_modal_edit_machine.php'; 
+
 if (!$is_modal) { 
-    include 'includes/warranty_modal_edit_machine.php'; 
     include 'includes/footer.php'; 
 } 
 ?>
