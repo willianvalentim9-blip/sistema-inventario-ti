@@ -19,6 +19,9 @@ RUN docker-php-ext-install pdo_mysql gd
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
+# Copia configuração PHP para enviar erros para stderr (capturado pelo Docker)
+COPY docker-php-errors.ini /usr/local/etc/php/conf.d/docker-php-errors.ini
+
 # Set the working directory
 WORKDIR /var/www/html
 

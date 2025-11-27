@@ -122,74 +122,51 @@ if (empty($code)) {
 </div>
 
 <style>
-@media print { 
-    .no-print, .sidebar-custom, .wrapper > .d-flex.flex-column, .container.mt-4.no-print { 
-        display: none !important; 
+@media print {
+    /* Esconde TUDO do body */
+    body * {
+        visibility: hidden !important;
     }
-    body { 
-        background-color: #fff !important; 
+
+    /* Mostra APENAS #printable-area e seus elementos internos */
+    #printable-area,
+    #printable-area * {
+        visibility: visible !important;
+    }
+
+    /* Posiciona #printable-area no topo da página */
+    #printable-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 20px !important;
+        text-align: center !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        color-adjust: exact;
+    }
+
+    /* Remove fundo e margens do body */
+    body {
+        background: white !important;
         margin: 0 !important;
         padding: 0 !important;
     }
-    .card { 
-        border: none !important; 
-        box-shadow: none !important; 
-        page-break-inside: avoid;
-    }
-    main.p-3.p-md-4.flex-grow-1 { 
-        padding: 0 !important; 
-        margin: 0 !important; 
-    }
-    #printable-area {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        color-adjust: exact;
-        page-break-inside: avoid;
-    }
-    /* Forçar exibição de imagens e SVG na impressão */
-    #barcode-container {
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        color-adjust: exact;
-        page-break-inside: avoid;
-        min-height: 80px;
-        background: #fff;
-    }
-    #barcode-container img,
-    #barcode-container svg {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        color-adjust: exact;
-        max-width: 100%;
-        height: auto;
-        page-break-inside: avoid;
-    }
-    .barcode-info {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        color-adjust: exact;
-        page-break-inside: avoid;
-    }
-    .barcode-info p {
-        margin: 0;
-        padding: 10px 0;
-        letter-spacing: 2px;
-    }
-    .card-body {
-        padding: 20px;
-    }
-    .card-header {
-        page-break-inside: avoid;
+
+    /* Garante que imagens/SVG do código de barras sejam impressas */
+    #printable-area img,
+    #printable-area svg {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        max-width: 100% !important;
+        height: auto !important;
     }
 }
-.barcode-info p { 
-    letter-spacing: 2px; 
+.barcode-info p {
+    letter-spacing: 2px;
 }
 </style>
 
