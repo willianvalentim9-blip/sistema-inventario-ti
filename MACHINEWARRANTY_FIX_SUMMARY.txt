@@ -1,0 +1,170 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                 ✅ PROBLEMA RESOLVIDO - GARANTIA APARECENDO               ║
+║                                                                            ║
+║              Máquinas com garantia agora aparecem em warranties.php        ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+═════════════════════════════════════════════════════════════════════════════
+
+📋 PROBLEMA IDENTIFICADO
+
+Ao editar máquina e ativar garantia, os dados não apareciam na página de
+garantias (warranties.php). Isso acontecia porque o arquivo includes/warranties.php
+só buscava dados da tabela "products", ignorando a tabela "ready_machines".
+
+═════════════════════════════════════════════════════════════════════════════
+
+🔧 SOLUÇÃO IMPLEMENTADA
+
+Arquivo: includes/warranties.php
+
+1. QUERY ANTERIOR (Apenas Produtos):
+   SELECT * FROM products WHERE has_warranty = 1
+
+2. QUERY NOVA (Produtos + Máquinas com UNION):
+   SELECT id, name, category, model, manufacturer, warranty_provider, 
+          warranty_start_date, warranty_end_date, status, 'product' as item_type
+   FROM products 
+   WHERE has_warranty = 1
+   UNION ALL
+   SELECT id, name, NULL, NULL, NULL, warranty_provider, 
+          NULL, NULL, status, 'machine' as item_type
+   FROM ready_machines 
+   WHERE has_warranty = 1
+   ORDER BY warranty_end_date ASC
+
+═════════════════════════════════════════════════════════════════════════════
+
+✅ ALTERAÇÕES REALIZADAS
+
+1. Query de Contagem
+   ✓ Agora conta máquinas E produtos com garantia
+   ✓ Total atualizado no badge
+
+2. Query Principal
+   ✓ UNION ALL combina produtos e máquinas
+   ✓ Campo item_type diferencia entre 'product' e 'machine'
+   ✓ Mesma ordenação por data de término
+
+3. Exibição da Tabela
+   ✓ Nova coluna "Tipo" mostra se é Produto ou Máquina
+   ✓ Ícones diferentes para cada tipo
+   ✓ Links corretos para editar/visualizar cada item
+
+4. UI/UX
+   ✓ Máquinas aparecem com ícone de servidor (fa-server) em amarelo
+   ✓ Produtos aparecem com ícone de caixa (fa-box) em azul
+   ✓ Título atualizado: "Garantias de Produtos" → "Garantias"
+   ✓ Mensagem quando vazio atualizada
+
+═════════════════════════════════════════════════════════════════════════════
+
+📊 RESULTADO
+
+ANTES:
+  • Só mostravam produtos com garantia
+  • Máquinas desapareciam ao ativar garantia
+  • Badge mostrava número incorreto
+
+DEPOIS:
+  • Mostra produtos E máquinas com garantia
+  ✓ Máquinas aparecem corretamente
+  ✓ Badge mostra total correto (produtos + máquinas)
+  ✓ Cada tipo tem ícone e cor distintos
+
+═════════════════════════════════════════════════════════════════════════════
+
+🎯 COMO USAR
+
+1. Edite uma máquina
+2. Ative "Com Garantia"
+3. Preencha fornecedor, duração e unidade
+4. Salve
+5. Abra: http://localhost/sistema4/warranties.php
+6. Procure por sua máquina na tabela
+7. Veja "Máquina" na coluna Tipo
+
+═════════════════════════════════════════════════════════════════════════════
+
+📋 TABELA DE EXIBIÇÃO - NOVA ESTRUTURA
+
+┌────────┬────────┬──────────┬──────────┬─────────┬─────────┬─────────┬────────────┐
+│ Item   │ Tipo   │ Catego.. │ Fornece..│ Início  │ Fim     │ Status  │ Ações      │
+├────────┼────────┼──────────┼──────────┼─────────┼─────────┼─────────┼────────────┤
+│ Prod 1 │Produto │ CPU      │ Samsung  │01/01/25 │01/01/26 │ Ativa   │ 👁 ✏      │
+│ Maq 1  │Máquina │ N/A      │ LG       │ N/A     │ N/A     │ N/A     │ 👁 ✏      │
+│ Prod 2 │Produto │ RAM      │ Dell     │15/02/25 │15/02/26 │ Ativa   │ 👁 ✏      │
+└────────┴────────┴──────────┴──────────┴─────────┴─────────┴─────────┴────────────┘
+
+═════════════════════════════════════════════════════════════════════════════
+
+🔗 LINKS DINÂMICOS
+
+Quando você clica em uma máquina:
+  • View: view_machine.php?id=X&modal=true
+  • Edit: edit_machine.php?id=X&modal=true
+
+Quando você clica em um produto:
+  • View: view_product.php?id=X&modal=true
+  • Edit: edit_product.php?id=X&modal=true
+
+═════════════════════════════════════════════════════════════════════════════
+
+📁 ARQUIVOS MODIFICADOS
+
+1. includes/warranties.php
+   • Query de contagem atualizada com UNION
+   • Query principal combinando produtos e máquinas
+   • Título alterado
+   • Coluna "Tipo" adicionada
+   • Ícones e cores diferenciadas
+   • Links dinâmicos baseados no tipo
+
+═════════════════════════════════════════════════════════════════════════════
+
+🧪 COMO TESTAR
+
+1. Acesse: http://localhost/sistema4/test_warranty_machines_display.php
+   Mostra JSON com:
+   • Máquinas com garantia
+   • Produtos com garantia
+   • Total combinado
+
+2. Acesse: http://localhost/sistema4/warranties.php
+   Verifique:
+   • Máquinas aparecem na tabela
+   • Badge mostra total correto
+   • Cada item tem ícone e tipo correto
+   • Links funcionam
+
+═════════════════════════════════════════════════════════════════════════════
+
+✨ RECURSOS ADICIONAIS
+
+1. Filtros Existentes Continuam Funcionando
+   ✓ Busca por nome/fornecedor
+   ✓ Filtro por categoria (de produtos)
+   ✓ Filtro por status
+   ✓ Filtro por status de garantia
+
+2. Ações Disponíveis
+   ✓ Visualizar máquina/produto
+   ✓ Editar máquina/produto
+   ✓ Verifica status de garantia
+
+═════════════════════════════════════════════════════════════════════════════
+
+🚀 STATUS FINAL
+
+✅ FUNCIONANDO CORRETAMENTE
+
+Máquinas com garantia agora aparecem em warranties.php junto com produtos,
+com exibição clara de qual tipo é cada item.
+
+═════════════════════════════════════════════════════════════════════════════
+
+Data: 2025-11-25
+Versão: 1.0
+Status: ✅ RESOLVIDO

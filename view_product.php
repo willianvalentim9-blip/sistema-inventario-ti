@@ -106,6 +106,36 @@ if (!$is_modal) {
 
     <div class="col-lg-4">
         <div class="card card-custom mb-4">
+            <div class="card-header card-header-custom"><i class="fas fa-shield-alt me-2"></i> Garantia</div>
+            <div class="card-body">
+                <?php 
+                    $has_warranty = $product['has_warranty'] ?? 0;
+                    if ($has_warranty): 
+                        $warranty_provider = $product['warranty_provider'] ?? 'Não informado';
+                        $warranty_period = $product['warranty_period_value'] ?? 'Não definido';
+                        $warranty_unit = $product['warranty_period_unit'] ?? '';
+                ?>
+                    <p class="mb-3">
+                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Com Garantia</span>
+                    </p>
+                    <?php if (!empty($warranty_provider)): ?>
+                        <p class="mb-3"><i class="fas fa-building me-1"></i> <strong><?php echo htmlspecialchars($warranty_provider); ?></strong></p>
+                    <?php endif; ?>
+                    
+                    <?php if ($warranty_period && $warranty_unit): ?>
+                        <p class="mb-3"><i class="fas fa-calendar me-1"></i> <?php echo $warranty_period; ?> <?php echo htmlspecialchars($warranty_unit); ?></p>
+                    <?php endif; ?>
+                    
+                    <a href="warranties.php" class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-external-link-alt me-1"></i>Ver Todas as Garantias</a>
+                <?php else: ?>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-times-circle me-1"></i>Sem garantia registrada
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="card card-custom mb-4">
             <div class="card-header card-header-custom"><i class="fas fa-image me-2"></i> Imagem do Produto</div>
             <div class="card-body text-center">
                 <?php if (!empty($product['image'])): ?>

@@ -75,7 +75,7 @@ try {
 // O sistema de flash message existente já exibirá o alerta aqui
 if (isset($_SESSION["flash_message"])) {
     echo 
-    '<div class="alert alert-' . $_SESSION["flash_type"] . ' alert-dismissible fade show" role="alert">
+    '<div class="alert alert-' . htmlspecialchars($_SESSION["flash_type"]) . ' alert-dismissible fade show" role="alert">
         ' . $_SESSION["flash_message"] . '
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>';
@@ -89,12 +89,6 @@ if (isset($_SESSION["flash_message"])) {
     <div class="btn-toolbar mb-2 mb-md-0">
         <div class="btn-group me-2">
             <a href="add_product.php" class="btn btn-sm btn-primary-custom"><i class="fas fa-plus me-1"></i> Novo Produto</a>
-        </div>
-        
-        <div class="btn-group me-2">
-            <button type="button" class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#quickStockInModal">
-                <i class="fas fa-bolt me-1"></i> Entrada Expressa
-            </button>
         </div>
 
         <div class="btn-group">

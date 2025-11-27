@@ -96,6 +96,35 @@ if (!$is_modal) {
     </div>
     <div class="col-lg-4">
         <div class="card card-custom mb-4">
+            <div class="card-header card-header-custom"><i class="fas fa-shield-alt me-2"></i> Garantia</div>
+            <div class="card-body">
+                <?php 
+                    $has_warranty = $machine['has_warranty'] ?? 0;
+                    if ($has_warranty): 
+                        $warranty_provider = $machine['warranty_provider'] ?? 'Não informado';
+                        $warranty_period = $machine['warranty_period_value'] ?? 'Não definido';
+                        $warranty_unit = $machine['warranty_period_unit'] ?? '';
+                ?>
+                    <p class="mb-3">
+                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Com Garantia</span>
+                    </p>
+                    <?php if (!empty($warranty_provider)): ?>
+                        <h6 class="text-primary-custom">Fornecedor</h6>
+                        <p class="mb-3"><i class="fas fa-building me-1"></i> <?php echo htmlspecialchars($warranty_provider); ?></p>
+                    <?php endif; ?>
+                    <?php if ($warranty_period && $warranty_unit): ?>
+                        <h6 class="text-primary-custom">Período</h6>
+                        <p class="mb-3"><i class="fas fa-calendar me-1"></i> <?php echo $warranty_period; ?> <?php echo $warranty_unit; ?></p>
+                    <?php endif; ?>
+                    <a href="warranties.php" class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-external-link-alt me-1"></i>Ver Todas as Garantias</a>
+                <?php else: ?>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-times-circle me-1"></i>Sem garantia registrada
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="card card-custom mb-4">
             <div class="card-header card-header-custom"><i class="fas fa-image me-2"></i> Imagem da Máquina</div>
             <div class="card-body text-center">
                 <?php if (!empty($machine['image']) && file_exists('uploads/machines/' . $machine['image'])): ?>

@@ -59,39 +59,104 @@ function showAlert(message, type = 'info', duration = 5000) {
 function openActionModal(url, title) {
     const modalElement = document.getElementById('actionModal');
     if (!modalElement) {
-        console.error('Modal element #actionModal not found.');
+        console.error('❌ Modal element #actionModal not found.');
         return;
     }
-    const actionModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    
     const modalTitle = document.getElementById('actionModalLabel');
     const modalBody = document.getElementById('actionModalBody');
 
-    modalTitle.innerText = title;
-    modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Carregando...</span></div></div>';
-    actionModal.show();
+    if (!modalTitle || !modalBody) {
+        console.error('❌ Modal header or body element not found.');
+        return;
+    }
+
+    try {
+        // Cria a instância do modal
+        const actionModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        
+        // Define o conteúdo inicial
+        modalTitle.innerText = title || 'Carregando...';
+        modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Carregando...</span></div></div>';
+        
+        // Remove aria-hidden antes de mostrar (Bootstrap cuida disso, mas garantimos aqui)
+        modalElement.removeAttribute('aria-hidden');
+        
+        // Mostra o modal
+        actionModal.show();
+        
+        console.log('📂 Abrindo modal...');
+    } catch (error) {
+        console.error('❌ Erro ao abrir modal:', error);
+        return;
+    }
 
     // **A CORREÇÃO PRINCIPAL ESTÁ AQUI**
     // Adiciona o parâmetro `modal=true` à URL para que o PHP não inclua header/footer.
     const fetchUrl = url.includes('?') ? `${url}&modal=true` : `${url}?modal=true`;
 
+    console.log('📂 Carregando conteúdo de:', fetchUrl);
+
     fetch(fetchUrl)
         .then(response => {
-            if (!response.ok) throw new Error('Falha ao carregar o conteúdo.');
+            console.log('📦 Resposta recebida:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`Erro HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             return response.text();
         })
         .then(html => {
+            if (!html || html.trim().length === 0) {
+                throw new Error('Conteúdo vazio recebido do servidor');
+            }
+            
+            console.log(`✅ Conteúdo carregado: ${html.length} caracteres`);
+            
+            // Insere o HTML no modal
             modalBody.innerHTML = html;
-            // Re-executa apenas os scripts DENTRO do conteúdo carregado.
-            // Como o footer não é mais incluído, isso não causará erros de redeclaração.
-            Array.from(modalBody.querySelectorAll("script")).forEach(oldScript => {
-                const newScript = document.createElement("script");
-                Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-                newScript.appendChild(document.createTextNode(oldScript.innerHTML));
-                oldScript.parentNode.replaceChild(newScript, oldScript);
-            });
+            console.log('🔧 HTML inserido no modal body');
+            
+            // Re-executa os scripts DENTRO do conteúdo carregado
+            const scripts = modalBody.querySelectorAll("script");
+            console.log(`📜 Scripts encontrados: ${scripts.length}`);
+            
+            if (scripts.length > 0) {
+                Array.from(scripts).forEach((oldScript, index) => {
+                    try {
+                        console.log(`🔄 Executando script ${index + 1}/${scripts.length}`);
+                        const newScript = document.createElement("script");
+                        
+                        // Copia os atributos
+                        Array.from(oldScript.attributes).forEach(attr => {
+                            newScript.setAttribute(attr.name, attr.value);
+                        });
+                        
+                        // Copia o conteúdo
+                        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                        
+                        // Substitui o script antigo pelo novo
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    } catch (e) {
+                        console.error(`❌ Erro ao executar script ${index + 1}:`, e);
+                    }
+                });
+            }
+            
+            console.log('✨ Modal carregado com sucesso!');
         })
         .catch(error => {
-            modalBody.innerHTML = `<div class="alert alert-danger">Erro ao carregar o conteúdo: ${error.message}</div>`;
+            console.error('❌ Erro ao carregar conteúdo:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Erro ao Carregar!</strong>
+                    <p class="mb-2">${error.message}</p>
+                    <small class="text-muted">URL: ${fetchUrl}</small>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            `;
         });
 }
 

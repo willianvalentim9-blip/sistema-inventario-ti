@@ -1,6 +1,6 @@
 <?php
 // ========================================
-// PÁGINA DE EDIÇÃO DE PRODUTO
+// PÁGINA DE EDIÇÃO DE PRODUTO (CORRIGIDO PARA REDIRECIONAR)
 // ========================================
 require_once 'config.php';
 requireLogin();
@@ -19,6 +19,7 @@ try {
     $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
     $stmt->execute([$product_id]);
     $product = $stmt->fetch();
+    
     if (!$product) {
         if (!$is_modal) header('Location: products.php');
         exit('Produto não encontrado.');
@@ -30,8 +31,10 @@ try {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    header('Content-Type: application/json');
-    $response = ['success' => false, 'message' => 'Ocorreu um erro desconhecido.'];
+    
+    // ==================================================================
+    // ⭐️ AJUSTE 1 (PHP): MODIFICADO PARA REDIRECIONAR
+    // ==================================================================
 
     $old_data = $product;
     $name = trim($_POST['name'] ?? '');
@@ -49,15 +52,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = trim($_POST['status'] ?? 'available');
     $image_to_save = trim($_POST['uploaded_image'] ?? $product['image']);
     
+    // Campos de garantia
+    $has_warranty = isset($_POST['has_warranty']) ? 1 : 0;
+    $warranty_provider = trim($_POST['edit_warranty_provider'] ?? '');
+    $warranty_period_value = !empty($_POST['edit_warranty_period_value']) ? intval($_POST['edit_warranty_period_value']) : null;
+    $warranty_period_unit = trim($_POST['edit_warranty_period_unit'] ?? '');
+    $warranty_start_date = !empty($_POST['edit_warranty_start_date']) ? trim($_POST['edit_warranty_start_date']) : null;
+    $warranty_end_date = !empty($_POST['edit_warranty_end_date']) ? trim($_POST['edit_warranty_end_date']) : null;
+    $invoice_number = trim($_POST['edit_invoice_number'] ?? '');
+    $warranty_notes = trim($_POST['edit_warranty_notes'] ?? '');
+    
+    $current_stock_quantity = $product['quantity']; 
+
+    // Validações
     if (empty($name) || empty($category)) {
-        $response['message'] = 'Nome e Categoria são obrigatórios.';
-        echo json_encode($response);
-        exit;
-    } elseif ($max_quantity > 0 && $product['quantity'] > $max_quantity) {
-        $response['message'] = 'A quantidade máxima (' . $max_quantity . ') não pode ser menor que a quantidade atual em estoque (' . $product['quantity'] . ').';
-        echo json_encode($response);
+        // Se der erro, mostramos a mensagem de erro no formulário
+        $_SESSION['flash_message'] = 'Nome e Categoria são obrigatórios.';
+        $_SESSION['flash_type'] = 'danger';
+        // Recarrega a página de edição para mostrar o erro
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
         exit;
     } 
+    
+    if ($max_quantity > 0 && $current_stock_quantity > $max_quantity) {
+        $_SESSION['flash_message'] = 'A quantidade máxima (' . $max_quantity . ') não pode ser menor que a quantidade atual em estoque (' . $current_stock_quantity . ').';
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
+        exit;
+    }
     
     try {
         $pdo->beginTransaction();
@@ -71,13 +93,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 name = ?, description = ?, image = ?, category = ?, manufacturer = ?, 
                 model = ?, serial_number = ?, barcode = ?, qr_code = ?, 
                 min_quantity = ?, max_quantity = ?, price = ?, location = ?, status = ?,
+                has_warranty = ?, warranty_provider = ?, warranty_period_value = ?,
+                warranty_period_unit = ?, warranty_start_date = ?, warranty_end_date = ?,
+                invoice_number = ?, warranty_notes = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ");
         $stmt->execute([
             $name, $description, $image_to_save, $category, $manufacturer, $model, 
             $serial_number, $barcode, $qr_code, $min_quantity, $max_quantity, 
-            $price, $location, $status, $product_id
+            $price, $location, $status,
+            $has_warranty, $has_warranty ? $warranty_provider : null, $has_warranty ? $warranty_period_value : null,
+            $has_warranty ? $warranty_period_unit : null, $has_warranty ? $warranty_start_date : null, $has_warranty ? $warranty_end_date : null,
+            $has_warranty ? $invoice_number : null, $has_warranty ? $warranty_notes : null,
+            $product_id
         ]);
         
         $new_data_stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
@@ -88,35 +117,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->commit();
         
-        $response['success'] = true;
-        $response['message'] = 'Produto atualizado com sucesso!';
-        
-        $_SESSION['flash_message'] = $response['message'];
+        // Seta a mensagem de sucesso
+        $_SESSION['flash_message'] = 'Produto atualizado com sucesso!';
         $_SESSION['flash_type'] = 'success';
-
-        echo json_encode($response);
+        
+        // Redireciona de volta para a lista de produtos
+        header('Location: products.php');
         exit();
 
     } catch (PDOException $e) {
         $pdo->rollBack();
-        http_response_code(500);
-        $response['message'] = 'Erro de banco de dados: ' . $e->getMessage();
-        echo json_encode($response);
+        
+        $_SESSION['flash_message'] = 'Erro de banco de dados: ' . $e->getMessage();
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
         exit();
     }
 }
 
-// Se não for uma requisição modal (carregada via AJAX), inclui o cabeçalho completo da página
+// ==================================================================
+// FIM DO BLOCO PHP
+// ==================================================================
+
+// Se houver uma mensagem de erro/sucesso da submissão anterior, exibe aqui
+$form_message = '';
+if (isset($_SESSION['flash_message'])) {
+    $alert_type = $_SESSION['flash_type'] === 'success' ? 'success' : 'danger';
+    $form_message = '<div class="alert alert-'. $alert_type . '">' . htmlspecialchars($_SESSION['flash_message']) . '</div>';
+    unset($_SESSION['flash_message']);
+    unset($_SESSION['flash_type']);
+}
+
+
 if (!$is_modal) {
     include 'includes/header.php';
 }
 ?>
 
-<form method="POST" action="edit_product.php?id=<?php echo $product['id']; ?>" enctype="multipart/form-data" id="editProductForm">
-    <div id="edit-error-message-product" class="mb-3"></div>
+<form method="POST" action="edit_product.php?id=<?php echo $product['id']; ?>&modal=true" enctype="multipart/form-data" id="editProductForm">
+    
+    <div id="edit-error-message-product" class="mb-3">
+        <?php echo $form_message; ?>
+    </div>
+
     <div class="row">
         <div class="col-md-6">
-            <h5 class="text-primary-custom mb-3"><i class="fas fa-info-circle me-2"></i>Informações Básicas</h5>
             <div class="mb-3">
                 <label for="name" class="form-label form-label-custom"><i class="fas fa-tag me-1"></i>Nome do Produto *</label>
                 <input type="text" class="form-control form-control-custom" id="name" name="name" value="<?php echo htmlspecialchars($product['name']); ?>" required>
@@ -155,12 +200,20 @@ if (!$is_modal) {
             </div>
             <div class="mb-3">
                 <label class="form-label form-label-custom"><i class="fas fa-camera me-1"></i>Imagem do Produto</label>
-                <div class="upload-area border rounded p-4 text-center" id="product-upload-area" style="cursor: pointer; min-height: 150px; display: flex; align-items: center; justify-content: center;">
+                <div class="upload-area border rounded p-4 text-center" id="product-upload-area" style="min-height: 150px; display: flex; align-items: center; justify-content: center;">
                     <input type="file" class="form-control" id="product_image_input" accept="image/*" style="display: none;">
-                    <div id="product-placeholder" style="<?php echo !empty($product['image']) ? 'display: none;' : ''; ?>">
+                    
+                    <div id="product-placeholder" style="cursor: pointer; <?php echo !empty($product['image']) ? 'display: none;' : ''; ?>">
                         <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
                         <p class="text-muted mb-2">Clique aqui ou arraste uma imagem</p>
                     </div>
+
+                    <div id="product-add-btn-container" class="text-center" style="display: none;">
+                        <button type="button" class="btn btn-outline-primary">
+                            <i class="fas fa-plus me-1"></i>Adicionar Imagem
+                        </button>
+                    </div>
+
                     <div id="product-preview-container" style="<?php echo empty($product['image']) ? 'display: none;' : ''; ?>">
                         <img id="product-preview-image" src="<?php echo !empty($product["image"]) ? 'uploads/products/' . htmlspecialchars($product["image"]) : ''; ?>" alt="Preview" class="img-thumbnail mb-2" style="max-width: 200px;">
                         <div>
@@ -172,10 +225,9 @@ if (!$is_modal) {
             </div>
         </div>
         <div class="col-md-6">
-            <h5 class="text-primary-custom mb-3"><i class="fas fa-qrcode me-2"></i>Códigos e Estoque</h5>
             <div class="mb-3">
                 <label for="serial_number" class="form-label form-label-custom"><i class="fas fa-hashtag me-1"></i>Nº de Série</label>
-                <input type="text" class="form-control form-control-custom" id="serial_number" name="serial_number" value="<?php echo htmlspecialchars($product['serial_number'] ?? ''); ?>">
+                <input type="text" class="form-control form-control-custom" id="serial_number" name="serial_number" value="<?php echo htmlspecialchars($product['serial_number']); ?>">
             </div>
             <div class="mb-3">
                 <label for="barcode" class="form-label form-label-custom"><i class="fas fa-barcode me-1"></i>Código de Barras</label>
@@ -203,28 +255,67 @@ if (!$is_modal) {
             </div>
             <div class="mb-3">
                 <label for="min_quantity" class="form-label form-label-custom"><i class="fas fa-exclamation-triangle text-warning me-1"></i>Qtd. Mínima</label>
-                <input type="number" class="form-control form-control-custom" id="min_quantity" name="min_quantity" value="<?php echo htmlspecialchars($product['min_quantity']); ?>" min="0">
+                <input type="number" class="form-control" id="min_quantity" name="min_quantity" value="<?php echo htmlspecialchars($product['min_quantity']); ?>" min="0">
             </div>
-            <div class="mb-3">
+             <div class="mb-3">
                 <label for="max_quantity" class="form-label form-label-custom"><i class="fas fa-chart-line text-info me-1"></i>Qtd. Máxima</label>
-                <input type="number" class="form-control form-control-custom" id="max_quantity" name="max_quantity" value="<?php echo htmlspecialchars($product['max_quantity']); ?>" min="0">
+                <input type="number" class="form-control" id="max_quantity" name="max_quantity" value="<?php echo htmlspecialchars($product['max_quantity']); ?>" min="0">
             </div>
             <div class="mb-3">
                 <label for="price" class="form-label form-label-custom"><i class="fas fa-dollar-sign me-1"></i>Preço (R$)</label>
-                <input type="text" class="form-control form-control-custom" id="price" name="price" value="<?php echo number_format($product['price'], 2, ',', '.'); ?>">
+                <input type="text" class="form-control" id="price" name="price" value="<?php echo number_format($product['price'], 2, ',', '.'); ?>">
             </div>
             <div class="mb-3">
                 <label for="location" class="form-label form-label-custom"><i class="fas fa-map-marker-alt me-1"></i>Localização</label>
-                <input type="text" class="form-control form-control-custom" id="location" name="location" value="<?php echo htmlspecialchars($product['location']); ?>">
+                <input type="text" class="form-control" id="location" name="location" value="<?php echo htmlspecialchars($product['location']); ?>">
             </div>
             <div class="mb-3">
                 <label for="status" class="form-label form-label-custom"><i class="fas fa-flag me-1"></i>Status</label>
-                <select class="form-select form-control-custom" id="status" name="status">
+                <select class="form-select" id="status" name="status">
                     <option value="available" <?php echo ($product['status'] ?? 'available') === 'available' ? 'selected' : ''; ?>>Disponível</option>
                     <option value="in_use" <?php echo ($product['status'] ?? '') === 'in_use' ? 'selected' : ''; ?>>Em Uso</option>
                     <option value="defective" <?php echo ($product['status'] ?? '') === 'defective' ? 'selected' : ''; ?>>Defeituoso</option>
                     <option value="maintenance" <?php echo ($product['status'] ?? '') === 'maintenance' ? 'selected' : ''; ?>>Manutenção</option>
+                    <option value="discontinued" <?php echo ($product['status'] ?? '') === 'discontinued' ? 'selected' : ''; ?>>Descontinuado</option>
                 </select>
+            </div>
+
+            <!-- BOTÃO E CHECKBOX DE GARANTIA -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="product_has_warranty" 
+                               name="has_warranty" value="1" <?php echo ($product['has_warranty'] ?? 0) ? 'checked' : ''; ?> 
+                               style="width: 3em; height: 1.5em;">
+                        <label class="form-check-label" for="product_has_warranty">
+                            <strong>Com Garantia</strong>
+                        </label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="editProductWarrantyBtn" 
+                            <?php echo ($product['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?> 
+                            data-bs-toggle="modal" data-bs-target="#warrantyModalProductEdit">
+                        <i class="fas fa-shield-alt me-1"></i>Editar Garantia
+                    </button>
+                </div>
+                
+                <!-- CAMPOS OCULTOS DE GARANTIA -->
+                <input type="hidden" id="edit_warranty_provider" name="edit_warranty_provider" value="<?php echo htmlspecialchars($product['warranty_provider'] ?? ''); ?>">
+                <input type="hidden" id="edit_invoice_number" name="edit_invoice_number" value="<?php echo htmlspecialchars($product['invoice_number'] ?? ''); ?>">
+                <input type="hidden" id="edit_warranty_start_date" name="edit_warranty_start_date" value="<?php echo htmlspecialchars($product['warranty_start_date'] ?? ''); ?>">
+                <input type="hidden" id="edit_warranty_period_value" name="edit_warranty_period_value" value="<?php echo htmlspecialchars($product['warranty_period_value'] ?? ''); ?>">
+                <input type="hidden" id="edit_warranty_period_unit" name="edit_warranty_period_unit" value="<?php echo htmlspecialchars($product['warranty_period_unit'] ?? 'months'); ?>">
+                <input type="hidden" id="edit_warranty_end_date" name="edit_warranty_end_date" value="<?php echo htmlspecialchars($product['warranty_end_date'] ?? ''); ?>">
+                <input type="hidden" id="edit_warranty_notes" name="edit_warranty_notes" value="<?php echo htmlspecialchars($product['warranty_notes'] ?? ''); ?>">
+
+                <!-- RESUMO VISUAL -->
+                <div id="warranty-summary-edit" class="alert alert-light border border-info p-2 mt-2 <?php echo ($product['has_warranty'] ?? 0) ? '' : 'd-none'; ?>">
+                    <small class="text-muted d-block mb-1"><i class="fas fa-shield-alt me-1 text-info"></i>Garantia:</small>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-light text-dark" id="summary-provider-edit"><?php echo htmlspecialchars($product['warranty_provider'] ?? 'Não informado'); ?></span>
+                        <span class="badge bg-light text-dark" id="summary-period-edit"><?php echo htmlspecialchars(($product['warranty_period_value'] ?? '-') . ' ' . ($product['warranty_period_unit'] ?? 'meses')); ?></span>
+                        <span class="badge bg-light text-dark" id="summary-end-edit"><?php echo ($product['warranty_end_date'] ?? false) ? date('d/m/Y', strtotime($product['warranty_end_date'])) : 'Data não definida'; ?></span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -235,20 +326,112 @@ if (!$is_modal) {
 </form>
 
 <?php 
-// Se o script for carregado como uma página completa, inclui o footer.
-// Se for carregado em um modal, o footer da página principal já fará o trabalho.
 if (!$is_modal) { 
+    $GLOBALS['is_inside_product_form'] = true;
+    include 'includes/warranty_modal_edit_inline.php'; 
     include 'includes/footer.php'; 
 } 
 ?>
 
 <script>
-// A lógica de controle do modal do scanner foi removida daqui, pois agora é global.
-// A função `window.setScannedCode` no footer.php cuidará de tudo.
+// SCRIPTS PARA EDIT PRODUCT
+document.addEventListener('DOMContentLoaded', function() {
+    const hasWarrantyCheckbox = document.getElementById('product_has_warranty');
+    const editWarrantyBtn = document.getElementById('editProductWarrantyBtn');
+    const warrantySummaryEdit = document.getElementById('warranty-summary-edit');
+
+    if (hasWarrantyCheckbox) {
+        hasWarrantyCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                editWarrantyBtn.style.display = 'inline-block';
+                warrantySummaryEdit.classList.remove('d-none');
+            } else {
+                editWarrantyBtn.style.display = 'none';
+                warrantySummaryEdit.classList.add('d-none');
+            }
+        });
+    }
+
+    // Modal de garantia para edição
+    const warrantyModalEdit = document.getElementById('warrantyModalProductEdit');
+    if (warrantyModalEdit) {
+        warrantyModalEdit.addEventListener('show.bs.modal', function() {
+            // Carrega dados do formulário para o modal
+            const fields = ['warranty_provider', 'invoice_number', 'warranty_start_date', 'warranty_period_value', 'warranty_period_unit', 'warranty_end_date', 'warranty_notes'];
+            
+            fields.forEach(field => {
+                const editField = document.getElementById('edit_' + field);
+                const modalField = document.getElementById('product_' + field);
+                
+                if (editField && modalField) {
+                    modalField.value = editField.value;
+                }
+            });
+
+            const modal = document.getElementById('warrantyModalProduct');
+            if (modal) {
+                const toggle = document.getElementById('product_has_warranty');
+                if (toggle) {
+                    toggle.checked = hasWarrantyCheckbox.checked;
+                }
+            }
+        });
+    }
+
+    // Sincronizar dados ao fechar o modal
+    if (warrantyModalEdit) {
+        warrantyModalEdit.addEventListener('hidden.bs.modal', function() {
+            const fields = ['warranty_provider', 'invoice_number', 'warranty_start_date', 'warranty_period_value', 'warranty_period_unit', 'warranty_end_date', 'warranty_notes'];
+            
+            fields.forEach(field => {
+                const editField = document.getElementById('edit_' + field);
+                const modalField = document.getElementById('product_' + field);
+                
+                if (editField && modalField) {
+                    editField.value = modalField.value;
+                }
+            });
+
+            // Atualizar resumo
+            updateWarrantySummaryEdit();
+        });
+    }
+
+    window.updateWarrantySummaryEdit = function() {
+        const provider = document.getElementById('edit_warranty_provider').value;
+        const periodValue = document.getElementById('edit_warranty_period_value').value;
+        const periodUnit = document.getElementById('edit_warranty_period_unit').value;
+        const endDate = document.getElementById('edit_warranty_end_date').value;
+
+        if (provider) {
+            document.getElementById('summary-provider-edit').textContent = provider;
+        }
+        if (periodValue && periodUnit) {
+            document.getElementById('summary-period-edit').textContent = `${periodValue} ${periodUnit}`;
+        }
+        if (endDate) {
+            const dateObj = new Date(endDate);
+            document.getElementById('summary-end-edit').textContent = dateObj.toLocaleDateString('pt-BR');
+        }
+    };
+});
+</script>
+
+<script>
+// ==================================================================
+// ⭐️ AJUSTE 2 (JS): REMOVIDO O 'addEventListener' DE SUBMIT
+// ==================================================================
+
+// O script de 'submit' (fetch) foi removido.
+// O formulário agora será enviado da forma tradicional (HTML),
+// permitindo que o PHP faça o redirecionamento.
+
+// Scripts que *NÃO* são de submit (como upload de imagem e gerador de código)
+// devem permanecer.
 
 document.addEventListener('DOMContentLoaded', function() {
-    
-    // Script para upload de imagem (permanece igual)
+
+    // Setup do Upload de Imagem (continua igual)
     if (typeof setupImageUpload === 'function') {
         setupImageUpload({
             formId: 'editProductForm',
@@ -257,6 +440,7 @@ document.addEventListener('DOMContentLoaded', function() {
             previewImageId: 'product-preview-image',
             placeholderId: 'product-placeholder',
             previewContainerId: 'product-preview-container',
+            addBtnContainerId: 'product-add-btn-container', 
             removeBtnId: 'product-remove-btn',
             uploadAreaId: 'product-upload-area',
             itemType: 'product',
@@ -264,64 +448,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Script de submissão do formulário via AJAX (permanece igual)
-    const editForm = document.getElementById('editProductForm');
-    if(editForm) {
-        editForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            const submitButton = this.querySelector('button[type="submit"]');
-            const originalButtonHtml = submitButton.innerHTML;
-
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
-            submitButton.disabled = true;
-
-            fetch(this.action, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const modalInstance = bootstrap.Modal.getInstance(this.closest('.modal'));
-                    if (modalInstance) {
-                        modalInstance.hide();
-                    }
-                    // Recarrega a página para mostrar a mensagem flash e atualizar os dados
-                    location.reload(); 
-                } else {
-                    document.getElementById('edit-error-message-product').innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
-                    submitButton.innerHTML = originalButtonHtml;
-                    submitButton.disabled = false;
-                }
-            })
-            .catch(error => {
-                document.getElementById('edit-error-message-product').innerHTML = `<div class="alert alert-danger">Erro de comunicação. Tente novamente.</div>`;
-                submitButton.innerHTML = originalButtonHtml;
-                submitButton.disabled = false;
-            });
-        });
-    }
+    // O 'submit' listener FOI REMOVIDO DAQUI
 });
 
-// Funções para gerar códigos (permanecem iguais)
+// Funções de Gerar Código (continuam iguais)
 function generateBarcode() {
     const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    const barcode = timestamp.toString() + random.toString().padStart(3, '0');
-    document.getElementById('barcode').value = barcode.substring(0, 13);
+    const barcode = '789' + timestamp.toString().substring(timestamp.toString().length - 10);
+    document.getElementById('barcode').value = barcode;
     if (typeof showAlert === 'function') {
-        showAlert('Código de barras gerado automaticamente.', 'info');
+        showAlert('Código de barras gerado.', 'info');
     }
 }
 
 function generateQRCode() {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000);
-    const qrCode = 'QR' + timestamp.toString() + random.toString().padStart(4, '0');
+    const qrCode = 'PROD-' + Date.now();
     document.getElementById('qr_code').value = qrCode;
     if (typeof showAlert === 'function') {
-        showAlert('Código QR gerado automaticamente.', 'info');
+        showAlert('Código QR gerado.', 'info');
     }
 }
 </script>

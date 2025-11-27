@@ -1,13 +1,14 @@
 <?php
 // ========================================
-// PÁGINA DE EDIÇÃO DE MÁQUINA (VERSÃO FINAL COM UPLOAD CORRIGIDO)
+// PAGINA DE EDICAO DE MAQUINA (VERSAO FINAL COM UPLOAD CORRIGIDO)
 // ========================================
 require_once 'config.php';
 requireLogin();
 
 $is_modal = isset($_GET['modal']) && $_GET['modal'] === 'true';
-$page_title = 'Editar Máquina';
+$page_title = 'Editar Maquina';
 $machine_id = intval($_GET["id"] ?? 0);
+$GLOBALS['is_inside_machine_form'] = true;
 
 if ($machine_id <= 0) {
     if (!$is_modal) header('Location: ready_machines.php');
@@ -44,31 +45,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = trim($_POST["status"] ?? "");
     $windows_10_compatible = isset($_POST["windows_10_compatible"]) ? 1 : 0;
     $windows_11_compatible = isset($_POST["windows_11_compatible"]) ? 1 : 0;
+    $has_warranty = isset($_POST["has_warranty"]) ? 1 : 0;
+    $warranty_provider = trim($_POST["machine_warranty_provider"] ?? '');
+    $warranty_period_value = !empty($_POST["machine_warranty_period_value"]) ? intval($_POST["machine_warranty_period_value"]) : null;
+    $warranty_period_unit = trim($_POST["machine_warranty_period_unit"] ?? '');
     $image_to_save = trim($_POST["uploaded_image"] ?? $machine["image"]);
     
     if (empty($name)) {
-        $response['message'] = 'O nome da máquina é obrigatório.';
-        echo json_encode($response);
-        exit;
+        $response['message'] = 'O nome da maquina é obrigatório.';
+        $_SESSION['flash_message'] = $response['message'];
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_machine.php?id=' . $machine_id . '&modal=true');
+        exit();
+    } elseif ($has_warranty && empty($warranty_provider)) {
+        $_SESSION['flash_message'] = 'Fornecedor de Garantia é obrigatório quando a máquina tem garantia.';
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_machine.php?id=' . $machine_id . '&modal=true');
+        exit();
+    } elseif ($has_warranty && empty($warranty_period_value)) {
+        $_SESSION['flash_message'] = 'Duração da Garantia é obrigatória quando a máquina tem garantia.';
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_machine.php?id=' . $machine_id . '&modal=true');
+        exit();
     } 
     
     try {
-        $stmt = $pdo->prepare("UPDATE ready_machines SET name = ?, description = ?, image = ?, processor = ?, memory = ?, storage = ?, graphics = ?, barcode = ?, qr_code = ?, sale_price = ?, status = ?, windows_10_compatible = ?, windows_11_compatible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-        $stmt->execute([$name, $description, $image_to_save, $processor, $memory, $storage, $graphics, $barcode, $qr_code, $sale_price, $status, $windows_10_compatible, $windows_11_compatible, $machine_id]);
+        $stmt = $pdo->prepare("UPDATE ready_machines SET name = ?, description = ?, image = ?, processor = ?, memory = ?, storage = ?, graphics = ?, barcode = ?, qr_code = ?, sale_price = ?, status = ?, windows_10_compatible = ?, windows_11_compatible = ?, has_warranty = ?, warranty_provider = ?, warranty_period_value = ?, warranty_period_unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        $stmt->execute([$name, $description, $image_to_save, $processor, $memory, $storage, $graphics, $barcode, $qr_code, $sale_price, $status, $windows_10_compatible, $windows_11_compatible, $has_warranty, $has_warranty ? $warranty_provider : null, $has_warranty ? $warranty_period_value : null, $has_warranty ? $warranty_period_unit : null, $machine_id]);
         
-        $response['success'] = true;
-        $response['message'] = 'Máquina atualizada com sucesso!';
-        
-        $_SESSION['flash_message'] = $response['message'];
+        $_SESSION['flash_message'] = 'Maquina atualizada com sucesso!';
         $_SESSION['flash_type'] = 'success';
         
-        echo json_encode($response);
+        header('Location: ready_machines.php');
         exit();
 
     } catch (PDOException $e) {
-        http_response_code(500);
-        $response['message'] = 'Erro de banco de dados: ' . $e->getMessage();
-        echo json_encode($response);
+        $_SESSION['flash_message'] = 'Erro de banco de dados: ' . $e->getMessage();
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_machine.php?id=' . $machine_id . '&modal=true');
         exit();
     }
 }
@@ -77,13 +91,25 @@ if (!$is_modal) {
     include 'includes/header.php';
 }
 
+// Se houver uma mensagem de erro/sucesso da submissao anterior, exibe aqui
+$form_message = '';
+if (isset($_SESSION['flash_message'])) {
+    $alert_type = $_SESSION['flash_type'] === 'success' ? 'success' : 'danger';
+    $form_message = '<div class="alert alert-'. $alert_type . '">' . htmlspecialchars($_SESSION['flash_message']) . '</div>';
+    unset($_SESSION['flash_message']);
+    unset($_SESSION['flash_type']);
+}
+
 $image_path = 'uploads/machines/' . htmlspecialchars($machine['image'] ?? '');
 $image_exists = !empty($machine['image']) && file_exists($image_path);
 
 ?>
 
 <form method="POST" action="edit_machine.php?id=<?php echo $machine['id']; ?>&modal=true" enctype="multipart/form-data" id="editMachineForm">
-    <div id="edit-error-message-machine" class="mb-3"></div>
+    
+    <div id="edit-error-message-machine" class="mb-3">
+        <?php echo $form_message; ?>
+    </div>
     <div class="row">
         <div class="col-md-8">
             <div class="mb-3">
@@ -132,6 +158,39 @@ $image_exists = !empty($machine['image']) && file_exists($image_path);
                     <label class="form-check-label" for="windows_11_compatible">Compatível com Windows 11</label>
                 </div>
             </div>
+            <!-- BOTÃO E CHECKBOX DE GARANTIA -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="machine_has_warranty" 
+                               name="has_warranty" value="1" <?php echo ($machine['has_warranty'] ?? 0) ? 'checked' : ''; ?> 
+                               style="width: 3em; height: 1.5em;">
+                        <label class="form-check-label" for="machine_has_warranty">
+                            <strong>Com Garantia</strong>
+                        </label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="editMachineWarrantyBtn" 
+                            <?php echo ($machine['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?> 
+                            data-bs-toggle="modal" data-bs-target="#warrantyModalMachineEdit">
+                        <i class="fas fa-shield-alt me-1"></i>Editar Garantia
+                    </button>
+                </div>
+                
+                <!-- CAMPOS OCULTOS DE GARANTIA -->
+                <input type="hidden" id="edit_warranty_provider" name="machine_warranty_provider" value="<?php echo htmlspecialchars($machine['warranty_provider'] ?? ''); ?>">
+                <input type="hidden" id="edit_warranty_period_value" name="machine_warranty_period_value" value="<?php echo htmlspecialchars($machine['warranty_period_value'] ?? ''); ?>">
+                <input type="hidden" id="edit_warranty_period_unit" name="machine_warranty_period_unit" value="<?php echo htmlspecialchars($machine['warranty_period_unit'] ?? 'months'); ?>">
+
+                <!-- RESUMO VISUAL -->
+                <div id="warranty-summary-machine" class="alert alert-light border border-info p-2 mt-2 <?php echo ($machine['has_warranty'] ?? 0) ? '' : 'd-none'; ?>">
+                    <small class="text-muted d-block mb-1"><i class="fas fa-shield-alt me-1 text-info"></i>Garantia:</small>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-light text-dark" id="summary-provider-machine"><?php echo htmlspecialchars($machine['warranty_provider'] ?? 'Nao informado'); ?></span>
+                        <span class="badge bg-light text-dark" id="summary-period-machine"><?php echo htmlspecialchars(($machine['warranty_period_value'] ?? '-') . ' ' . ($machine['warranty_period_unit'] ?? 'meses')); ?></span>
+                    </div>
+                </div>
+            </div>
+
             <div class="mb-3">
                 <label class="form-label form-label-custom"><i class="fas fa-camera me-1"></i>Imagem</label>
                 <div class="upload-area border rounded p-3 text-center" id="machine-upload-area">
@@ -161,7 +220,75 @@ $image_exists = !empty($machine['image']) && file_exists($image_path);
 </form>
 
 <script>
-    // A função setupImageUpload do seu custom.js original será chamada para este formulário.
+// SCRIPTS PARA EDIT MACHINE
+document.addEventListener('DOMContentLoaded', function() {
+    const hasWarrantyCheckbox = document.getElementById('machine_has_warranty');
+    const editWarrantyBtn = document.getElementById('editMachineWarrantyBtn');
+    const warrantySummaryEdit = document.getElementById('warranty-summary-machine');
+
+    if (hasWarrantyCheckbox) {
+        hasWarrantyCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                editWarrantyBtn.style.display = 'inline-block';
+                warrantySummaryEdit.classList.remove('d-none');
+            } else {
+                editWarrantyBtn.style.display = 'none';
+                warrantySummaryEdit.classList.add('d-none');
+            }
+        });
+    }
+
+    // Modal de garantia para edicao
+    const warrantyModalEdit = document.getElementById('warrantyModalMachineEdit');
+    if (warrantyModalEdit) {
+        warrantyModalEdit.addEventListener('show.bs.modal', function() {
+            // Carrega dados do formulario para o modal
+            const fields = ['warranty_provider', 'warranty_period_value', 'warranty_period_unit'];
+            
+            fields.forEach(field => {
+                const editField = document.getElementById('edit_' + field);
+                const modalField = document.getElementById('machine_' + field);
+                
+                if (editField && modalField) {
+                    modalField.value = editField.value;
+                }
+            });
+        });
+    }
+
+    // Sincronizar dados ao fechar o modal
+    if (warrantyModalEdit) {
+        warrantyModalEdit.addEventListener('hidden.bs.modal', function() {
+            const fields = ['warranty_provider', 'warranty_period_value', 'warranty_period_unit'];
+            
+            fields.forEach(field => {
+                const editField = document.getElementById('edit_' + field);
+                const modalField = document.getElementById('machine_' + field);
+                
+                if (editField && modalField) {
+                    editField.value = modalField.value;
+                }
+            });
+
+            // Atualizar resumo
+            updateWarrantySummaryMachine();
+        });
+    }
+
+    window.updateWarrantySummaryMachine = function() {
+        const provider = document.getElementById('edit_warranty_provider').value;
+        const periodValue = document.getElementById('edit_warranty_period_value').value;
+        const periodUnit = document.getElementById('edit_warranty_period_unit').value;
+
+        if (provider) {
+            document.getElementById('summary-provider-machine').textContent = provider;
+        }
+        if (periodValue && periodUnit) {
+            document.getElementById('summary-period-machine').textContent = `${periodValue} ${periodUnit}`;
+        }
+    };
+
+    // A funcao setupImageUpload do seu custom.js original sera chamada para este formulario.
     setupImageUpload({
         formId: 'editMachineForm',
         fileInputId: 'machine_image_input',
@@ -176,52 +303,31 @@ $image_exists = !empty($machine['image']) && file_exists($image_path);
         itemId: <?php echo $machine_id; ?>
     });
 
-    document.getElementById('editMachineForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        const submitButton = this.querySelector('button[type="submit"]');
-        const originalButtonHtml = submitButton.innerHTML;
+    // O 'submit' listener FOI REMOVIDO DAQUI
+});
 
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
-        submitButton.disabled = true;
-
-        fetch(this.action, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const modal = bootstrap.Modal.getInstance(this.closest('.modal'));
-                modal.hide();
-                location.reload(); 
-            } else {
-                document.getElementById('edit-error-message-machine').innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
-                submitButton.innerHTML = originalButtonHtml;
-                submitButton.disabled = false;
-            }
-        })
-        .catch(error => {
-            document.getElementById('edit-error-message-machine').innerHTML = `<div class="alert alert-danger">Erro de comunicação. Tente novamente.</div>`;
-            submitButton.innerHTML = originalButtonHtml;
-            submitButton.disabled = false;
-        });
-    });
-
-    function generateBarcode() {
-        const timestamp = Date.now();
-        const barcode = '789' + timestamp.toString().substring(timestamp.toString().length - 9);
-        document.getElementById('barcode').value = barcode;
-        if (typeof showAlert === 'function') {
-            showAlert('Código de barras gerado.', 'info');
-        }
+// Funcoes de Gerar Codigo (continuam iguais)
+function generateBarcode() {
+    const timestamp = Date.now();
+    const barcode = '789' + timestamp.toString().substring(timestamp.toString().length - 9);
+    document.getElementById('barcode').value = barcode;
+    if (typeof showAlert === 'function') {
+        showAlert('Codigo de barras gerado.', 'info');
     }
+}
 
-    function generateQRCode() {
-        const qrCode = 'MACHINE-' + Date.now();
-        document.getElementById('qr_code').value = qrCode;
-        if (typeof showAlert === 'function') {
-            showAlert('Código QR gerado.', 'info');
+function generateQRCode() {
+    const qrCode = 'MACHINE-' + Date.now();
+    document.getElementById('qr_code').value = qrCode;
+    if (typeof showAlert === 'function') {
+        showAlert('Codigo QR gerado.', 'info');
         }
     }
 </script>
+
+<?php 
+if (!$is_modal) { 
+    include 'includes/warranty_modal_edit_machine.php'; 
+    include 'includes/footer.php'; 
+} 
+?>

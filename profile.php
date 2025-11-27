@@ -157,16 +157,7 @@ include 'includes/header.php';
                                 <label for="email" class="form-label">Email</label>
                                 <input type="email" class="form-control" id="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
                             </div>
-                            <div class="mb-3">
-                                <label for="theme" class="form-label">Tema Visual</label>
-                                <select class="form-select" id="theme" name="theme">
-                                    <option value="blue" <?php echo ($user['theme'] === 'blue') ? 'selected' : ''; ?>>Azul (Padrão)</option>
-                                    <option value="green" <?php echo ($user['theme'] === 'green') ? 'selected' : ''; ?>>Verde</option>
-                                    <option value="red" <?php echo ($user['theme'] === 'red') ? 'selected' : ''; ?>>Vermelho</option>
-                                    <option value="purple" <?php echo ($user['theme'] === 'purple') ? 'selected' : ''; ?>>Roxo</option>
-                                    <option value="dark_blue" <?php echo ($user['theme'] === 'dark_blue') ? 'selected' : ''; ?>>Azul Escuro</option>
-                                </select>
-                            </div>
+                           
                             <button type="submit" class="btn btn-primary-custom"><i class="fas fa-save me-1"></i> Salvar Alterações</button>
                         </form>
                     </div>

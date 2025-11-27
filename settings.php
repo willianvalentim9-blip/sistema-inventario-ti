@@ -25,33 +25,125 @@ try {
 }
 
 // Processa o formulário para salvar configurações
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
-    try {
-        $pdo->beginTransaction();
-        $settings_to_save = ['system_name', 'company_name', 'company_slogan'];
-        
-        $stmt = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        
-        foreach ($settings_to_save as $key) {
-            if (isset($_POST[$key])) {
-                $stmt->execute([$key, trim($_POST[$key])]);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'save_settings') {
+        try {
+            $pdo->beginTransaction();
+            $settings_to_save = ['system_name', 'company_name', 'company_slogan'];
+            
+            $stmt = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+            
+            foreach ($settings_to_save as $key) {
+                if (isset($_POST[$key])) {
+                    $stmt->execute([$key, trim($_POST[$key])]);
+                }
             }
+            $pdo->commit();
+            logAdminActivity($_SESSION["user_id"], "UPDATE_SETTINGS", "system_settings");
+            $_SESSION['flash_message'] = 'Configurações salvas com sucesso!';
+            $_SESSION['flash_type'] = 'success';
+            
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $_SESSION['flash_message'] = 'Erro ao salvar configurações: ' . $e->getMessage();
+            $_SESSION['flash_type'] = 'danger';
         }
-        $pdo->commit();
-        logAdminActivity($_SESSION["user_id"], "UPDATE_SETTINGS", "system_settings");
-        $_SESSION['flash_message'] = 'Configurações salvas com sucesso!';
-        $_SESSION['flash_type'] = 'success';
-        
-    } catch (Exception $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        $_SESSION['flash_message'] = 'Erro ao salvar configurações: ' . $e->getMessage();
-        $_SESSION['flash_type'] = 'danger';
+        header("Location: settings.php");
+        exit();
     }
-    header("Location: settings.php");
-    exit();
+
+    if ($action === 'backup_database') {
+        try {
+            $pdo = getConnection();
+            
+            // Cria arquivo de backup com timestamp
+            $backup_dir = __DIR__ . '/backups';
+            if (!is_dir($backup_dir)) {
+                mkdir($backup_dir, 0755, true);
+            }
+            
+            $timestamp = date('Y-m-d_H-i-s');
+            $backup_file = $backup_dir . '/backup_' . $timestamp . '.sql';
+            
+            // Executa mysqldump via PowerShell
+            $db_host = DB_HOST;
+            $db_user = DB_USER;
+            $db_pass = DB_PASS;
+            $db_name = DB_NAME;
+            
+            // Comando PowerShell para executar mysqldump
+            $command = "Get-Content -LiteralPath 'NONE' | & 'C:\\xampp\\mysql\\bin\\mysqldump.exe' -h " . escapeshellarg($db_host) . " -u " . escapeshellarg($db_user) . " -p" . escapeshellarg($db_pass) . " " . escapeshellarg($db_name);
+            
+            // Alternativa: usar função PHP para fazer backup
+            $tables = [];
+            $stmt = $pdo->query("SHOW TABLES");
+            while ($row = $stmt->fetch(PDO::FETCH_NUM)) {
+                $tables[] = $row[0];
+            }
+            
+            $sql_content = "-- Backup do banco de dados: " . DB_NAME . "\n";
+            $sql_content .= "-- Data: " . date('Y-m-d H:i:s') . "\n";
+            $sql_content .= "-- Host: " . DB_HOST . "\n\n";
+            
+            // Para cada tabela, faz dump
+            foreach ($tables as $table) {
+                $sql_content .= "\n-- Estrutura da tabela: $table\n";
+                $sql_content .= "DROP TABLE IF EXISTS `$table`;\n";
+                
+                // Get CREATE TABLE
+                $stmt = $pdo->query("SHOW CREATE TABLE `$table`");
+                $create_table = $stmt->fetch(PDO::FETCH_NUM)[1];
+                $sql_content .= $create_table . ";\n";
+                
+                // Get dados
+                $stmt = $pdo->query("SELECT * FROM `$table`");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                if (!empty($rows)) {
+                    $sql_content .= "\nINSERT INTO `$table` VALUES\n";
+                    $values = [];
+                    foreach ($rows as $row) {
+                        $row_values = [];
+                        foreach ($row as $value) {
+                            if ($value === null) {
+                                $row_values[] = 'NULL';
+                            } else {
+                                $row_values[] = $pdo->quote($value);
+                            }
+                        }
+                        $values[] = '(' . implode(',', $row_values) . ')';
+                    }
+                    $sql_content .= implode(",\n", $values) . ";\n";
+                }
+            }
+            
+            // Salva arquivo
+            file_put_contents($backup_file, $sql_content);
+            
+            logAdminActivity($_SESSION["user_id"], "BACKUP_DATABASE_SUCCESS", "backup: " . basename($backup_file));
+            $_SESSION['flash_message'] = 'Backup realizado com sucesso! Arquivo: ' . basename($backup_file);
+            $_SESSION['flash_type'] = 'success';
+            
+        } catch (Exception $e) {
+            logAdminActivity($_SESSION["user_id"], "BACKUP_DATABASE_ERROR", "erro: " . $e->getMessage());
+            $_SESSION['flash_message'] = 'Erro ao fazer backup: ' . $e->getMessage();
+            $_SESSION['flash_type'] = 'danger';
+        }
+        header("Location: settings.php");
+        exit();
+    }
 }
 
 include 'includes/header.php';
+
+// Exibe mensagens flash que podem ter sido definidas no processamento do POST
+if (isset($_SESSION["flash_message"])) {
+    echo '<div class="alert alert-' . htmlspecialchars($_SESSION["flash_type"] ?? 'info') . ' alert-dismissible fade show" role="alert">' . htmlspecialchars($_SESSION["flash_message"]) . '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>';
+    unset($_SESSION["flash_message"]);
+    unset($_SESSION["flash_type"]);
+}
 ?>
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -60,8 +152,8 @@ include 'includes/header.php';
     
 <div class="row">
     <div class="col-lg-8">
-        <form method="POST" action="settings.php">
-             <input type="hidden" name="save_settings" value="1">
+        <form method="POST" action="settings.php" id="settings-form">
+             <input type="hidden" name="action" value="save_settings">
             <div class="card card-custom mb-4">
                 <div class="card-header card-header-custom"><i class="fas fa-info-circle me-2"></i>Informações Gerais</div>
                 <div class="card-body">
@@ -113,8 +205,34 @@ include 'includes/header.php';
                 </div>
             </div>
         </div>
+
+        <div class="card card-custom mb-4">
+            <div class="card-header card-header-custom"><i class="fas fa-tools me-2"></i>Manutenção do Sistema</div>
+            <div class="card-body">
+                <p class="text-muted small">Realize tarefas de manutenção para otimizar o sistema.</p>
+                <div class="d-grid gap-2">
+                    <button type="submit" form="backupForm" class="btn btn-success"><i class="fas fa-database me-2"></i>Fazer Backup Agora</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card card-custom mb-4">
+            <div class="card-header card-header-custom"><i class="fas fa-clipboard-list me-2"></i>Diagnóstico e Logs</div>
+            <div class="card-body">
+                <p class="text-muted small">Acesse os registros e ferramentas de diagnóstico.</p>
+                <div class="d-grid gap-2">
+                    <a href="admin_logs.php" class="btn btn-outline-secondary"><i class="fas fa-shield-alt me-2"></i>Logs de Administrador</a>
+                    <a href="diagnostico.php" class="btn btn-outline-info" target="_blank"><i class="fas fa-stethoscope me-2"></i>Diagnóstico do Servidor</a>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Formulário de backup (oculto) -->
+<form method="POST" action="settings.php" id="backupForm" class="d-none">
+    <input type="hidden" name="action" value="backup_database">
+</form>
 
 <?php 
 // O FOOTER É INCLUÍDO AQUI, CARREGANDO TODOS OS SCRIPTS GLOBAIS

@@ -123,15 +123,18 @@ if (empty($code)) {
 
 <style>
 @media print { 
-    .no-print, .sidebar-custom, .wrapper > .d-flex.flex-column { 
+    .no-print, .sidebar-custom, .wrapper > .d-flex.flex-column, .container.mt-4.no-print { 
         display: none !important; 
     }
     body { 
         background-color: #fff !important; 
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .card { 
         border: none !important; 
         box-shadow: none !important; 
+        page-break-inside: avoid;
     }
     main.p-3.p-md-4.flex-grow-1 { 
         padding: 0 !important; 
@@ -139,7 +142,50 @@ if (empty($code)) {
     }
     #printable-area {
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
         color-adjust: exact;
+        page-break-inside: avoid;
+    }
+    /* Forçar exibição de imagens e SVG na impressão */
+    #barcode-container {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        color-adjust: exact;
+        page-break-inside: avoid;
+        min-height: 80px;
+        background: #fff;
+    }
+    #barcode-container img,
+    #barcode-container svg {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        color-adjust: exact;
+        max-width: 100%;
+        height: auto;
+        page-break-inside: avoid;
+    }
+    .barcode-info {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        color-adjust: exact;
+        page-break-inside: avoid;
+    }
+    .barcode-info p {
+        margin: 0;
+        padding: 10px 0;
+        letter-spacing: 2px;
+    }
+    .card-body {
+        padding: 20px;
+    }
+    .card-header {
+        page-break-inside: avoid;
     }
 }
 .barcode-info p { 
@@ -239,9 +285,17 @@ function updateBarcode() {
     
     barcodeText.textContent = code || originalCode;
 
-    const apiUrl = `generate_barcode_image.php?code=${encodeURIComponent(code)}&type=${type}&width=${width}&height=${height}`;
+    // Construir URL absoluta para garantir funcionamento em impressão
+    const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname.split('/').slice(0, -1).join('/');
+    const apiUrl = `${baseUrl}/generate_barcode_image.php?code=${encodeURIComponent(code)}&type=${type}&width=${width}&height=${height}`;
     
-    const img = new Image();
+    // Usar document.createElement em vez de new Image() para suportar SVG
+    const img = document.createElement('img');
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
+    img.crossOrigin = 'anonymous';
+    
     img.onload = () => { 
         container.innerHTML = ''; 
         container.appendChild(img); 

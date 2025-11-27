@@ -1,4 +1,4 @@
-</main>
+        </main>
 
         <?php if (isLoggedIn() && !isset($hide_sidebar)): ?>
             <footer class="bg-light text-secondary mt-auto py-3 text-center no-print" style="font-size: 0.9rem;">

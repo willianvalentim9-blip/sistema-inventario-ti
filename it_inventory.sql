@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Tempo de geração: 25/09/2025 às 15:20
+-- Tempo de geração: 19/11/2025 às 19:17
 -- Versão do servidor: 10.4.32-MariaDB
 -- Versão do PHP: 8.0.30
 
@@ -20,6 +20,129 @@ SET time_zone = "+00:00";
 --
 -- Banco de dados: `it_inventory`
 --
+CREATE DATABASE IF NOT EXISTS `it_inventory` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE `it_inventory`;
+
+DELIMITER $$
+--
+-- Procedimentos
+--
+DROP PROCEDURE IF EXISTS `GetWarrantyAlerts`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GetWarrantyAlerts` (IN `p_alert_level` INT)   BEGIN
+    -- p_alert_level: 1=Ativas, 2=Atenção, 3=Crítica, 4=Expirada
+    SELECT 
+        p.id,
+        p.name,
+        p.category,
+        p.warranty_end_date,
+        DATEDIFF(p.warranty_end_date, CURDATE()) as days_remaining,
+        p.warranty_provider,
+        CASE 
+            WHEN p.warranty_end_date < CURDATE() THEN 'Expirada'
+            WHEN DATEDIFF(p.warranty_end_date, CURDATE()) <= 7 THEN 'Crítica (7 dias)'
+            WHEN DATEDIFF(p.warranty_end_date, CURDATE()) <= 30 THEN 'Atenção (30 dias)'
+            ELSE 'Ativa'
+        END as status
+    FROM products p
+    WHERE p.has_warranty = 1
+    AND (
+        (p_alert_level = 1 AND DATEDIFF(p.warranty_end_date, CURDATE()) > 30) OR
+        (p_alert_level = 2 AND DATEDIFF(p.warranty_end_date, CURDATE()) > 7 AND DATEDIFF(p.warranty_end_date, CURDATE()) <= 30) OR
+        (p_alert_level = 3 AND DATEDIFF(p.warranty_end_date, CURDATE()) >= 0 AND DATEDIFF(p.warranty_end_date, CURDATE()) <= 7) OR
+        (p_alert_level = 4 AND p.warranty_end_date < CURDATE())
+    )
+    ORDER BY p.warranty_end_date ASC;
+END$$
+
+DROP PROCEDURE IF EXISTS `RegisterWarrantyHistory`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RegisterWarrantyHistory` (IN `p_product_id` INT, IN `p_user_id` INT, IN `p_action_type` VARCHAR(20), IN `p_old_values` JSON, IN `p_new_values` JSON, IN `p_description` VARCHAR(500))   BEGIN
+    INSERT INTO warranty_history (
+        product_id,
+        user_id,
+        action_type,
+        old_values,
+        new_values,
+        change_description
+    ) VALUES (
+        p_product_id,
+        p_user_id,
+        p_action_type,
+        p_old_values,
+        p_new_values,
+        p_description
+    );
+END$$
+
+--
+-- Funções
+--
+DROP FUNCTION IF EXISTS `CalculateWarrantyStatus`$$
+CREATE DEFINER=`root`@`localhost` FUNCTION `CalculateWarrantyStatus` (`warranty_end_date` DATE) RETURNS VARCHAR(20) CHARSET utf8mb4 COLLATE utf8mb4_general_ci DETERMINISTIC BEGIN
+    IF warranty_end_date IS NULL THEN
+        RETURN 'Sem Garantia';
+    ELSEIF warranty_end_date < CURDATE() THEN
+        RETURN 'Expirada';
+    ELSEIF DATEDIFF(warranty_end_date, CURDATE()) <= 7 THEN
+        RETURN 'Crítica';
+    ELSEIF DATEDIFF(warranty_end_date, CURDATE()) <= 30 THEN
+        RETURN 'Atenção';
+    ELSE
+        RETURN 'Ativa';
+    END IF;
+END$$
+
+-- Função para calcular dias restantes de garantia
+DROP FUNCTION IF EXISTS `GetWarrantyDaysRemaining`$$
+CREATE DEFINER=`root`@`localhost` FUNCTION `GetWarrantyDaysRemaining` (`warranty_end_date` DATE) RETURNS INT DETERMINISTIC BEGIN
+    IF warranty_end_date IS NULL THEN
+        RETURN -1;
+    ELSE
+        RETURN DATEDIFF(warranty_end_date, CURDATE());
+    END IF;
+END$$
+
+-- Função para gerar código de barcode único
+DROP FUNCTION IF EXISTS `GenerateBarcodeCode`$$
+CREATE DEFINER=`root`@`localhost` FUNCTION `GenerateBarcodeCode` (`category` VARCHAR(50)) RETURNS VARCHAR(100) DETERMINISTIC BEGIN
+    DECLARE new_code VARCHAR(100);
+    DECLARE code_exists INT;
+    DECLARE random_suffix VARCHAR(10);
+    
+    SET random_suffix = LPAD(FLOOR(RAND() * 1000000), 7, '0');
+    SET new_code = CONCAT('IT-', UPPER(SUBSTRING(category, 1, 3)), '-', UNIX_TIMESTAMP(), '-', random_suffix);
+    
+    SELECT COUNT(*) INTO code_exists 
+    FROM products 
+    WHERE barcode = new_code;
+    
+    WHILE code_exists > 0 DO
+        SET random_suffix = LPAD(FLOOR(RAND() * 1000000), 7, '0');
+        SET new_code = CONCAT('IT-', UPPER(SUBSTRING(category, 1, 3)), '-', UNIX_TIMESTAMP(), '-', random_suffix);
+        SELECT COUNT(*) INTO code_exists 
+        FROM products 
+        WHERE barcode = new_code;
+    END WHILE;
+    
+    RETURN new_code;
+END$$
+
+-- Função para validar estoque
+DROP FUNCTION IF EXISTS `ValidateStock`$$
+CREATE DEFINER=`root`@`localhost` FUNCTION `ValidateStock` (`product_id` INT, `quantity_needed` INT) RETURNS BOOLEAN DETERMINISTIC BEGIN
+    DECLARE available_qty INT;
+    
+    SELECT quantity INTO available_qty 
+    FROM products 
+    WHERE id = product_id;
+    
+    IF available_qty IS NULL THEN
+        RETURN FALSE;
+    END IF;
+    
+    RETURN available_qty >= quantity_needed;
+END$$
+
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -27,15 +150,211 @@ SET time_zone = "+00:00";
 -- Estrutura para tabela `admin_logs`
 --
 
-CREATE TABLE `admin_logs` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `admin_logs`;
+CREATE TABLE IF NOT EXISTS `admin_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) DEFAULT NULL,
   `action` varchar(255) NOT NULL,
   `table_name` varchar(100) DEFAULT NULL,
+  `record_id` int(11) DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
   `user_agent` text DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `old_values` text DEFAULT NULL,
+  `new_values` text DEFAULT NULL,
+  `details` text DEFAULT NULL,
+  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=520 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Despejando dados para a tabela `admin_logs`
+--
+
+INSERT IGNORE INTO `admin_logs` (`id`, `user_id`, `action`, `table_name`, `record_id`, `ip_address`, `user_agent`, `old_values`, `new_values`, `details`, `timestamp`) VALUES
+(355, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/135.0.0.0 Safari\\/537.36 OPR\\/120.0.0.0\"', NULL, '2025-10-02 12:05:45'),
+(356, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/135.0.0.0 Safari\\/537.36 OPR\\/120.0.0.0\"', NULL, '2025-10-02 12:06:57'),
+(357, 1, 'UPDATE_LOGO', 'system_settings', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', NULL, NULL, NULL, '2025-10-02 12:07:14'),
+(358, 1, 'REMOVE_LOGO', 'system_settings', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', NULL, NULL, NULL, '2025-10-02 13:22:40'),
+(359, 1, 'UPDATE_LOGO', 'system_settings', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', NULL, NULL, NULL, '2025-10-02 13:22:43'),
+(360, 1, 'REMOVE_LOGO', 'system_settings', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', NULL, NULL, NULL, '2025-10-02 13:22:47'),
+(361, 1, 'UPDATE_LOGO', 'system_settings', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', NULL, NULL, NULL, '2025-10-02 13:22:51'),
+(362, 1, 'LOGIN', 'users', 1, '192.168.25.100', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.25.100\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-02 13:30:07'),
+(363, 1, 'CREATE', 'products', 27, '192.168.25.100', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', NULL, NULL, NULL, '2025-10-02 13:32:04'),
+(364, 1, 'LOGIN', 'users', 1, '192.168.25.100', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.25.100\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-02 13:33:45'),
+(365, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/135.0.0.0 Safari\\/537.36 OPR\\/120.0.0.0\"', NULL, '2025-10-02 13:40:03'),
+(366, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/135.0.0.0 Safari\\/537.36 OPR\\/120.0.0.0\"', NULL, '2025-10-02 13:40:08'),
+(367, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1', '\"::1\"', '\"Mozilla\\/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit\\/605.1.15 (KHTML, like Gecko) Version\\/13.0.3 Mobile\\/15E148 Safari\\/604.1\"', NULL, '2025-10-02 16:03:37'),
+(368, 1, 'LOGIN', 'users', 1, '192.168.25.100', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.25.100\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 12:01:42'),
+(369, 1, 'CREATE', 'products', 28, '192.168.25.100', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', NULL, NULL, NULL, '2025-10-03 12:04:26'),
+(370, 1, 'LOGIN', 'users', 1, '192.168.25.100', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.25.100\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 12:52:28'),
+(371, 1, 'LOGIN', 'users', 1, '192.168.0.104', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.0.104\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 16:57:15'),
+(372, 1, 'LOGOUT', 'users', 1, '192.168.0.104', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.0.104\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 18:00:54'),
+(373, 1, 'LOGIN', 'users', 1, '192.168.0.104', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.0.104\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 18:01:19'),
+(374, 1, 'LOGOUT', 'users', 1, '192.168.0.104', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.0.104\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 18:03:56'),
+(375, 1, 'LOGIN', 'users', 1, '192.168.0.104', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', '\"192.168.0.104\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-10-03 18:13:12'),
+(376, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/135.0.0.0 Safari\\/537.36 OPR\\/120.0.0.0\"', NULL, '2025-10-07 19:58:00'),
+(377, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/135.0.0.0 Safari\\/537.36 OPR\\/120.0.0.0\"', NULL, '2025-10-07 19:58:09'),
+(378, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-10-08 17:58:28'),
+(379, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 13:19:12'),
+(380, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, NULL, NULL, '2025-11-11 14:13:31'),
+(381, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 15:55:49'),
+(382, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 15:55:52'),
+(383, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": null,\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": null,\n    \"location\": null,\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-10-14 15:47:16\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:09:56\"\n}', NULL, '2025-11-11 16:09:56'),
+(384, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:09:56\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN32655\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:10:15\"\n}', NULL, '2025-11-11 16:10:15'),
+(385, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN32655\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:10:15\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326554\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:16:52\"\n}', NULL, '2025-11-11 16:16:52'),
+(386, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326554\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:16:52\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326554\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:18:03\"\n}', NULL, '2025-11-11 16:18:03'),
+(387, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326554\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:18:03\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:18:11\"\n}', NULL, '2025-11-11 16:18:11'),
+(388, 1, 'BACKUP_DATABASE_ATTEMPT', 'system', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, NULL, NULL, '2025-11-11 16:19:40'),
+(389, 1, 'BACKUP_DATABASE', NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, NULL, NULL, '2025-11-11 16:19:55'),
+(390, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:18:11\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN32655\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:21:18\"\n}', NULL, '2025-11-11 16:21:18'),
+(391, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN32655\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:21:18\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:22:09\"\n}', NULL, '2025-11-11 16:22:09'),
+(392, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:22:09\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:23:51\"\n}', NULL, '2025-11-11 16:23:51'),
+(393, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:23:51\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:23:52\"\n}', NULL, '2025-11-11 16:23:53'),
+(394, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:23:52\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:23:53\"\n}', NULL, '2025-11-11 16:23:53'),
+(395, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:23:53\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:24:00\"\n}', NULL, '2025-11-11 16:24:00'),
+(396, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:24:00\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:24:02\"\n}', NULL, '2025-11-11 16:24:02'),
+(397, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:24:58\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:26:29\"\n}', NULL, '2025-11-11 16:26:29'),
+(398, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:26:29\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:27:56\"\n}', NULL, '2025-11-11 16:27:56'),
+(399, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:27:56\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:28:04\"\n}', NULL, '2025-11-11 16:28:04'),
+(400, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:28:04\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:29:01\"\n}', NULL, '2025-11-11 16:29:01'),
+(401, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:29:01\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:30:13\"\n}', NULL, '2025-11-11 16:30:13'),
+(402, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:30:13\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:30:40\"\n}', NULL, '2025-11-11 16:30:40'),
+(403, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:30:40\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:30:46\"\n}', NULL, '2025-11-11 16:30:46'),
+(404, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 16:41:03'),
+(405, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 16:41:09'),
+(406, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 16:47:49'),
+(407, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 16:47:53'),
+(408, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 16:50:26'),
+(409, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 16:50:29'),
+(410, 1, 'LOGIN', 'users', 1, '192.168.25.151', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36', '\"192.168.25.151\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-11-11 17:02:00'),
+(411, 1, 'BACKUP_DATABASE_ATTEMPT', 'system', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, NULL, NULL, '2025-11-11 17:03:37'),
+(412, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 13:30:46\",\n    \"has_warranty\": 0,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 15:37:00\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', NULL, '2025-11-11 18:37:00'),
+(413, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265553\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 15:37:00\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 15:59:10\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', NULL, '2025-11-11 18:59:10'),
+(414, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 15:59:10\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:02:04\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', NULL, '2025-11-11 19:02:04');
+INSERT IGNORE INTO `admin_logs` (`id`, `user_id`, `action`, `table_name`, `record_id`, `ip_address`, `user_agent`, `old_values`, `new_values`, `details`, `timestamp`) VALUES
+(415, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN326555\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:02:04\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:10:09\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', NULL, '2025-11-11 19:10:09'),
+(416, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:10:09\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN32655523\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:12:33\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', NULL, '2025-11-11 19:12:33'),
+(417, 1, 'LOGIN', 'users', 1, '192.168.25.151', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36', '\"192.168.25.151\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-11-11 19:23:34'),
+(418, 1, 'LOGOUT', 'users', 1, '192.168.25.151', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36', '\"192.168.25.151\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-11-11 19:24:04'),
+(419, 1, 'LOGIN', 'users', 1, '192.168.25.151', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36', '\"192.168.25.151\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\"', NULL, '2025-11-11 19:24:15'),
+(420, 1, 'LOGIN', 'users', 1, '192.168.25.151', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36 OPR/92.0.0.0', '\"192.168.25.151\"', '\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/140.0.0.0 Mobile Safari\\/537.36 OPR\\/92.0.0.0\"', NULL, '2025-11-11 19:27:03'),
+(421, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 19:27:23'),
+(422, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 19:27:28'),
+(423, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 19:32:04'),
+(424, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 19:32:08'),
+(425, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 19:33:54'),
+(426, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-11 19:34:00'),
+(427, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN32655523\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:12:33\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-11 16:56:08\",\n    \"has_warranty\": 1,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\"\n}', NULL, '2025-11-11 19:56:08'),
+(428, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-11\",\n    \"warranty_end_date\": null,\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-11 20:06:00'),
+(429, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-11\",\n    \"warranty_end_date\": null,\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-11\",\n    \"warranty_end_date\": \"2025-11-11\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-11 20:08:56'),
+(430, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-11\",\n    \"warranty_end_date\": \"2025-11-11\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-11\",\n    \"warranty_end_date\": \"2025-11-11\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-11 20:10:58'),
+(431, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-11\",\n    \"warranty_end_date\": \"2025-11-11\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-02\",\n    \"warranty_end_date\": \"2025-11-11\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-11 20:11:06'),
+(432, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 11:18:00'),
+(433, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 11:18:05'),
+(434, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-02\",\n    \"warranty_end_date\": \"2025-11-11\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:18:27'),
+(435, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 11:23:38'),
+(436, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 11:23:44'),
+(437, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:35:21'),
+(438, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:36:35'),
+(439, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:38:55'),
+(440, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:38:59'),
+(441, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:39:04'),
+(442, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-04-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 5,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:39:11'),
+(443, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-04-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 5,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:45:54'),
+(444, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:47:04'),
+(445, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 11:47:26'),
+(446, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 13:01:18'),
+(447, 1, 'EXPORT', 'low_stock', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, NULL, NULL, '2025-11-12 14:22:31'),
+(448, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 14:29:57'),
+(449, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-02-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 3,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 14:44:57'),
+(450, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 14:56:47'),
+(451, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"rqwerqwer\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 14:56:59'),
+(452, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-03-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 4,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-04-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 5,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 18:38:58'),
+(453, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-04-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 5,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-05-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 6,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 19:00:18'),
+(454, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-05-12\",\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": 6,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-11-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 12,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 19:07:50'),
+(455, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-11-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 12,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-11-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 12,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 19:10:04'),
+(456, 1, 'CREATE', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, NULL, NULL, '2025-11-12 19:46:31'),
+(457, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 20:16:59'),
+(458, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 20:17:31'),
+(459, 1, 'DELETE_WARRANTY_TEMPLATE', 'warranty_templates', 10, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"ba\"\n}', NULL, NULL, '2025-11-12 20:22:52'),
+(460, 1, 'DELETE_WARRANTY_TEMPLATE', 'warranty_templates', 7, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"TESTE\"\n}', NULL, NULL, '2025-11-12 20:23:08'),
+(461, 1, 'DELETE_WARRANTY_TEMPLATE', 'warranty_templates', 12, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"bi\"\n}', NULL, NULL, '2025-11-12 20:23:15'),
+(462, 1, 'CREATE_WARRANTY_TEMPLATE', 'warranty_templates', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, '{\n    \"name\": \"A\"\n}', NULL, '2025-11-12 20:23:35'),
+(463, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-11-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 12,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-08-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 9,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 20:37:32'),
+(464, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-08-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 9,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-09-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 10,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 20:37:41'),
+(465, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-09-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"TESTE\",\n    \"warranty_period_value\": 10,\n    \"warranty_period_unit\": \"months\"\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-01-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 14,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-12 20:38:25'),
+(466, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 20:44:19'),
+(467, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-12 20:44:28'),
+(468, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-13 16:36:27'),
+(469, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-13 17:04:54'),
+(470, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-13 17:10:49'),
+(471, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/138.0.0.0 Safari\\/537.36 OPR\\/122.0.0.0\"', NULL, '2025-11-13 19:11:18'),
+(472, 1, 'DELETE_WARRANTY_TEMPLATE', 'warranty_templates', 17, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"A\"\n}', NULL, NULL, '2025-11-13 20:43:12'),
+(473, 1, 'UPDATE_WARRANTY_SUPPLIER', 'warranty_suppliers', 14, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, '{\n    \"name\": \"Autorizaçãúo Geral de Garantias\"\n}', NULL, '2025-11-13 20:54:57'),
+(474, 1, 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', 6, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"Brother Ind├║stria de M├íquinas do Brasil\"\n}', NULL, NULL, '2025-11-13 20:55:38'),
+(475, 1, 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', 14, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"Autorizaçãúo Geral de Garantias\"\n}', NULL, NULL, '2025-11-13 20:57:36'),
+(476, 1, 'CREATE_WARRANTY_SUPPLIER', 'warranty_suppliers', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', NULL, '{\n    \"name\": \"TESTE\"\n}', NULL, '2025-11-13 21:01:41'),
+(477, 1, 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', 15, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": \"TESTE\"\n}', NULL, NULL, '2025-11-13 21:01:56'),
+(478, 1, 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', 15, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0', '{\n    \"name\": null\n}', NULL, NULL, '2025-11-13 21:04:50'),
+(479, 1, 'CREATE_WARRANTY_SUPPLIER', 'warranty_suppliers', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', NULL, '{\n    \"name\": \"TESTE\"\n}', NULL, '2025-11-17 12:41:51'),
+(480, 1, 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', 16, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"name\": \"TESTE\"\n}', NULL, NULL, '2025-11-17 12:45:07'),
+(481, 1, 'CREATE_WARRANTY_SUPPLIER', 'warranty_suppliers', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', NULL, '{\n    \"name\": \"TESTE\"\n}', NULL, '2025-11-17 12:47:59'),
+(482, 1, 'UPDATE_WARRANTY_SUPPLIER', 'warranty_suppliers', 17, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', NULL, '{\n    \"name\": \"TESTE\"\n}', NULL, '2025-11-17 12:49:28'),
+(483, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 12:56:56'),
+(484, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 12:57:03'),
+(485, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 12:58:37'),
+(486, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 12:58:41'),
+(487, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 12:58:48'),
+(488, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 12:59:14'),
+(489, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 12:59:17'),
+(490, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 12:59:28'),
+(491, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 12:59:33'),
+(492, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 12:59:46'),
+(493, 1, 'LOGOUT', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 12:59:59'),
+(494, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 13:00:12'),
+(495, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 13:00:26'),
+(496, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/139.0.0.0 Safari\\/537.36 OPR\\/123.0.0.0\"', NULL, '2025-11-17 13:00:38'),
+(497, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Safari\\/537.36 Edg\\/142.0.0.0\"', NULL, '2025-11-17 13:02:18'),
+(498, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-01-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 14,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2025-12-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-17 13:03:12'),
+(499, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-17 13:03:34'),
+(500, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2025-12-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-01-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-17 13:21:39'),
+(501, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-01-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": 17\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-01-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-17 13:27:11');
+INSERT IGNORE INTO `admin_logs` (`id`, `user_id`, `action`, `table_name`, `record_id`, `ip_address`, `user_agent`, `old_values`, `new_values`, `details`, `timestamp`) VALUES
+(502, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2026-01-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 2,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2025-12-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-17 13:41:04'),
+(503, 1, 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', 17, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', NULL, '{\n    \"name\": \"TESTE\"\n}', NULL, '2025-11-19 17:39:35'),
+(504, 1, 'LOGIN', 'users', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.106.0 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36', '\"::1\"', '\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Code\\/1.106.0 Chrome\\/138.0.7204.251 Electron\\/37.7.0 Safari\\/537.36\"', NULL, '2025-11-19 17:43:55'),
+(505, 1, 'UPDATE', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": null,\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-12 16:46:31\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:05:19\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:05:19'),
+(506, 1, 'UPDATE', 'products', 27, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 27,\n    \"name\": \"SSD WD 500GB\",\n    \"description\": \"Backup alana cuidado!\",\n    \"category_id\": null,\n    \"category\": \"SSD\",\n    \"manufacturer\": \"WD\",\n    \"model\": \"WD5000LPCX\",\n    \"sku\": null,\n    \"barcode\": \"IT-SSD-1759411924-9678\",\n    \"qr_code\": null,\n    \"serial_number\": null,\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"100.00\",\n    \"location\": \"Prateira 1\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68de7e9748df18.34388998.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-02 10:32:04\",\n    \"updated_at\": \"2025-10-03 08:34:23\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 27,\n    \"name\": \"SSD WD 500GB\",\n    \"description\": \"Backup alana cuidado!\",\n    \"category_id\": null,\n    \"category\": \"SSD\",\n    \"manufacturer\": \"WD\",\n    \"model\": \"WD5000LPCX\",\n    \"sku\": null,\n    \"barcode\": \"IT-SSD-1759411924-9678\",\n    \"qr_code\": null,\n    \"serial_number\": null,\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"100.00\",\n    \"location\": \"Prateira 1\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68de7e9748df18.34388998.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-02 10:32:04\",\n    \"updated_at\": \"2025-11-19 15:05:33\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:05:33'),
+(507, 1, 'UPDATE', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:05:19\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:05:36\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:05:36'),
+(508, 1, 'UPDATE', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:05:36\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:07:25\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:07:25'),
+(509, 1, 'UPDATE', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-17 10:41:04\",\n    \"has_warranty\": 1,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": \"TESTE\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2025-12-12\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"description\": \"\",\n    \"category_id\": null,\n    \"category\": \"HDD\",\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"ST500LM012\",\n    \"sku\": null,\n    \"barcode\": \"IT-HDD-1759493066-6607\",\n    \"qr_code\": null,\n    \"serial_number\": \"SN3265552\",\n    \"quantity\": 2,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"0.00\",\n    \"location\": \"\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68dfbbb4e4d929.37907428.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-03 09:04:26\",\n    \"updated_at\": \"2025-11-19 15:07:33\",\n    \"has_warranty\": 1,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": \"TESTE\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2025-12-12\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:07:33'),
+(510, 1, 'UPDATE', 'products', 27, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 27,\n    \"name\": \"SSD WD 500GB\",\n    \"description\": \"Backup alana cuidado!\",\n    \"category_id\": null,\n    \"category\": \"SSD\",\n    \"manufacturer\": \"WD\",\n    \"model\": \"WD5000LPCX\",\n    \"sku\": null,\n    \"barcode\": \"IT-SSD-1759411924-9678\",\n    \"qr_code\": null,\n    \"serial_number\": null,\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"100.00\",\n    \"location\": \"Prateira 1\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68de7e9748df18.34388998.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-02 10:32:04\",\n    \"updated_at\": \"2025-11-19 15:05:33\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 27,\n    \"name\": \"SSD WD 500GB\",\n    \"description\": \"Backup alana cuidado!\",\n    \"category_id\": null,\n    \"category\": \"SSD\",\n    \"manufacturer\": \"WD\",\n    \"model\": \"WD5000LPCX\",\n    \"sku\": null,\n    \"barcode\": \"IT-SSD-1759411924-9678\",\n    \"qr_code\": null,\n    \"serial_number\": null,\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"100.00\",\n    \"location\": \"Prateira 1\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"img_68de7e9748df18.34388998.jpg\",\n    \"notes\": null,\n    \"created_at\": \"2025-10-02 10:32:04\",\n    \"updated_at\": \"2025-11-19 15:07:36\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:07:36'),
+(511, 1, 'UPDATE', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:07:25\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:08:05\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:08:05'),
+(512, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2025-12-12\",\n    \"warranty_provider\": \"TESTE\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"AAA\",\n    \"warranty_period_value\": 1,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-11-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 24,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-19 18:08:45'),
+(513, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-11-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 24,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-11-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 24,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-19 18:08:46'),
+(514, 1, 'CREATE_WARRANTY_SUPPLIER', 'warranty_suppliers', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', NULL, '{\n    \"name\": \"LOL\"\n}', NULL, '2025-11-19 18:09:07'),
+(515, 1, 'UPDATE_WARRANTY_SUPPLIER', 'warranty_suppliers', 18, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', NULL, '{\n    \"name\": \"LOL\"\n}', NULL, '2025-11-19 18:09:23'),
+(516, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-11-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 24,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-10-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 23,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-19 18:10:11'),
+(517, 1, 'UPDATE_WARRANTY', 'products', 28, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-10-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 23,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": \"123123\",\n    \"warranty_label\": \"1231231\",\n    \"warranty_client_name\": \"GIGI\",\n    \"warranty_supplier_id\": 18\n}', '{\n    \"id\": 28,\n    \"name\": \"HD 500GB\",\n    \"warranty_start_date\": \"2025-11-12\",\n    \"warranty_end_date\": \"2027-10-12\",\n    \"warranty_provider\": \"Distribuidor\",\n    \"invoice_number\": \"zx\\\\\",\n    \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\",\n    \"warranty_period_value\": 23,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-19 18:10:12'),
+(518, 1, 'UPDATE', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:08:05\",\n    \"has_warranty\": 0,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": null,\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": null,\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": null,\n    \"warranty_notes\": null,\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"description\": \"A\",\n    \"category_id\": null,\n    \"category\": \"CPU\",\n    \"manufacturer\": \"A\",\n    \"model\": \"A\",\n    \"sku\": null,\n    \"barcode\": \"A\",\n    \"qr_code\": \"A\",\n    \"serial_number\": \"A\",\n    \"quantity\": 1,\n    \"min_quantity\": 5,\n    \"max_quantity\": 100,\n    \"price\": \"1.00\",\n    \"location\": \"A\",\n    \"status\": \"available\",\n    \"created_by\": null,\n    \"image\": \"\",\n    \"notes\": null,\n    \"created_at\": \"2025-11-12 16:46:31\",\n    \"updated_at\": \"2025-11-19 15:10:55\",\n    \"has_warranty\": 1,\n    \"warranty_template_id\": null,\n    \"warranty_provider\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', NULL, '2025-11-19 18:10:55'),
+(519, 1, 'UPDATE_WARRANTY', 'products', 29, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/123.0.0.0', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"warranty_start_date\": null,\n    \"warranty_end_date\": null,\n    \"warranty_provider\": \"\",\n    \"invoice_number\": \"\",\n    \"warranty_notes\": \"\",\n    \"warranty_period_value\": null,\n    \"warranty_period_unit\": \"months\",\n    \"warranty_ticket_number\": null,\n    \"warranty_label\": null,\n    \"warranty_client_name\": null,\n    \"warranty_supplier_id\": null\n}', '{\n    \"id\": 29,\n    \"name\": \"A\",\n    \"warranty_start_date\": \"2025-11-19\",\n    \"warranty_end_date\": \"2026-11-19\",\n    \"warranty_provider\": \"Fabricante\",\n    \"invoice_number\": \"12331231\",\n    \"warranty_notes\": \"Suporte técnico incluído. Manutenção preventiva coberta. Peças e mão de obra incluídas.\",\n    \"warranty_period_value\": 12,\n    \"warranty_period_unit\": \"months\"\n}', NULL, '2025-11-19 18:11:23');
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura para tabela `categories`
+--
+
+DROP TABLE IF EXISTS `categories`;
+CREATE TABLE IF NOT EXISTS `categories` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `type` enum('product','machine') NOT NULL COMMENT 'Define se a categoria é para produtos ou máquinas',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name_type_unique` (`name`,`type`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -43,9 +362,10 @@ CREATE TABLE `admin_logs` (
 -- Estrutura para tabela `machine_inputs`
 --
 
-CREATE TABLE `machine_inputs` (
-  `id` int(11) NOT NULL,
-  `machine_id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `machine_inputs`;
+CREATE TABLE IF NOT EXISTS `machine_inputs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `machine_id` int(11) DEFAULT NULL,
   `user_id` int(11) DEFAULT NULL,
   `quantity_added` int(11) NOT NULL DEFAULT 1,
   `reason` varchar(255) NOT NULL,
@@ -53,15 +373,11 @@ CREATE TABLE `machine_inputs` (
   `input_date` timestamp NOT NULL DEFAULT current_timestamp(),
   `machine_name` varchar(255) DEFAULT NULL,
   `machine_serial_number` varchar(100) DEFAULT NULL,
-  `machine_cost_price` decimal(10,2) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Despejando dados para a tabela `machine_inputs`
---
-
-INSERT INTO `machine_inputs` (`id`, `machine_id`, `user_id`, `quantity_added`, `reason`, `details`, `input_date`, `machine_name`, `machine_serial_number`, `machine_cost_price`) VALUES
-(5, 6, 1, 10, 'Compra de Fornecedor', 'Compra de Fornecedor', '2025-09-25 12:44:40', 'we', NULL, 100.00);
+  `machine_cost_price` decimal(12,2) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `machine_inputs_ibfk_1` (`machine_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -69,23 +385,20 @@ INSERT INTO `machine_inputs` (`id`, `machine_id`, `user_id`, `quantity_added`, `
 -- Estrutura para tabela `machine_movements`
 --
 
-CREATE TABLE `machine_movements` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `machine_movements`;
+CREATE TABLE IF NOT EXISTS `machine_movements` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `machine_id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
   `movement_type` varchar(50) NOT NULL,
   `old_status` varchar(50) DEFAULT NULL,
   `new_status` varchar(50) NOT NULL,
   `details` text DEFAULT NULL,
-  `movement_date` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Despejando dados para a tabela `machine_movements`
---
-
-INSERT INTO `machine_movements` (`id`, `machine_id`, `user_id`, `movement_type`, `old_status`, `new_status`, `details`, `movement_date`) VALUES
-(11, 6, 1, 'entrada', 'available', 'available', 'Compra de Fornecedor', '2025-09-25 12:44:40');
+  `movement_date` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `machine_id` (`machine_id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -93,8 +406,9 @@ INSERT INTO `machine_movements` (`id`, `machine_id`, `user_id`, `movement_type`,
 -- Estrutura para tabela `machine_outputs`
 --
 
-CREATE TABLE `machine_outputs` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `machine_outputs`;
+CREATE TABLE IF NOT EXISTS `machine_outputs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `machine_id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
   `quantity_removed` int(11) NOT NULL DEFAULT 1,
@@ -103,20 +417,10 @@ CREATE TABLE `machine_outputs` (
   `output_date` timestamp NOT NULL DEFAULT current_timestamp(),
   `machine_name` varchar(255) DEFAULT NULL,
   `machine_serial_number` varchar(100) DEFAULT NULL,
-  `final_sale_price` decimal(10,2) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Despejando dados para a tabela `machine_outputs`
---
-
-INSERT INTO `machine_outputs` (`id`, `machine_id`, `user_id`, `quantity_removed`, `reason`, `details`, `output_date`, `machine_name`, `machine_serial_number`, `final_sale_price`) VALUES
-(1, 4, 1, 1, 'Descarte', '', '2025-09-24 20:49:41', 'ewqrqwer', 'rweqrqw', NULL),
-(2, 4, 1, 1, 'Venda', '', '2025-09-24 20:49:44', 'ewqrqwer', 'rweqrqw', 100.00),
-(3, 4, 1, 1, 'Descarte', '', '2025-09-24 20:51:25', 'ewqrqwer', 'rweqrqw', NULL),
-(4, 4, 1, 1, 'Descarte', '', '2025-09-24 20:51:57', 'ewqrqwer', 'rweqrqw', NULL),
-(5, 5, 1, 1, 'Uso Interno', 'fgsgdf', '2025-09-25 11:48:12', 'TESTE', 'qweqwe', NULL),
-(6, 5, 1, 1, 'Venda', '', '2025-09-25 12:32:39', 'TESTE', 'qweqwe', 10.00);
+  `final_sale_price` decimal(12,2) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -124,10 +428,12 @@ INSERT INTO `machine_outputs` (`id`, `machine_id`, `user_id`, `quantity_removed`
 -- Estrutura para tabela `products`
 --
 
-CREATE TABLE `products` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `products`;
+CREATE TABLE IF NOT EXISTS `products` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `description` text DEFAULT NULL,
+  `category_id` int(11) DEFAULT NULL,
   `category` varchar(100) NOT NULL,
   `manufacturer` varchar(100) DEFAULT NULL,
   `model` varchar(100) DEFAULT NULL,
@@ -138,21 +444,99 @@ CREATE TABLE `products` (
   `quantity` int(11) NOT NULL DEFAULT 0,
   `min_quantity` int(11) DEFAULT 0,
   `max_quantity` int(11) DEFAULT 0,
-  `price` decimal(10,2) DEFAULT NULL,
+  `price` decimal(12,2) DEFAULT NULL,
   `location` varchar(100) DEFAULT NULL,
   `status` varchar(50) DEFAULT 'available',
+  `created_by` int(11) DEFAULT NULL,
   `image` varchar(255) DEFAULT NULL,
   `notes` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `has_warranty` tinyint(1) NOT NULL DEFAULT 0,
+  `warranty_template_id` int(11) DEFAULT NULL COMMENT 'ID do template de garantia usado',
+  `warranty_provider` varchar(255) DEFAULT NULL,
+  `warranty_period_value` int(11) DEFAULT NULL,
+  `warranty_period_unit` varchar(20) DEFAULT NULL,
+  `warranty_start_date` date DEFAULT NULL,
+  `warranty_end_date` date DEFAULT NULL,
+  `invoice_number` varchar(255) DEFAULT NULL,
+  `warranty_notes` text DEFAULT NULL,
+  `warranty_ticket_number` varchar(100) DEFAULT NULL COMMENT 'N??mero do ticket/protocolo da garantia',
+  `warranty_label` varchar(100) DEFAULT NULL COMMENT 'Etiqueta/Identificador da garantia',
+  `warranty_client_name` varchar(255) DEFAULT NULL COMMENT 'Nome do cliente propriet??rio do produto com garantia',
+  `warranty_supplier_id` int(11) DEFAULT NULL COMMENT 'Refer??ncia para o fornecedor de garantia',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `sku` (`sku`),
+  UNIQUE KEY `barcode` (`barcode`),
+  UNIQUE KEY `qr_code` (`qr_code`),
+  UNIQUE KEY `serial_number` (`serial_number`),
+  KEY `idx_created_by` (`created_by`),
+  KEY `fk_product_category` (`category_id`),
+  KEY `idx_warranty_template` (`warranty_template_id`),
+  KEY `idx_warranty_dates` (`warranty_start_date`,`warranty_end_date`),
+  KEY `idx_has_warranty` (`has_warranty`),
+  KEY `idx_warranty_ticket` (`warranty_ticket_number`),
+  KEY `idx_warranty_label` (`warranty_label`),
+  KEY `idx_warranty_client` (`warranty_client_name`),
+  KEY `idx_warranty_supplier` (`warranty_supplier_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `products`
 --
 
-INSERT INTO `products` (`id`, `name`, `description`, `category`, `manufacturer`, `model`, `sku`, `barcode`, `qr_code`, `serial_number`, `quantity`, `min_quantity`, `max_quantity`, `price`, `location`, `status`, `image`, `notes`, `created_at`, `updated_at`) VALUES
-(9, 'qwerqwer', 'qrwe', 'Case', 'erqwreqw', 'qerqwer', NULL, 'IT-CASE-1758805254-1988', NULL, NULL, 12, 5, 100, 1000.00, NULL, 'available', NULL, NULL, '2025-09-25 13:00:54', '2025-09-25 13:18:26');
+INSERT IGNORE INTO `products` (`id`, `name`, `description`, `category_id`, `category`, `manufacturer`, `model`, `sku`, `barcode`, `qr_code`, `serial_number`, `quantity`, `min_quantity`, `max_quantity`, `price`, `location`, `status`, `created_by`, `image`, `notes`, `created_at`, `updated_at`, `has_warranty`, `warranty_template_id`, `warranty_provider`, `warranty_period_value`, `warranty_period_unit`, `warranty_start_date`, `warranty_end_date`, `invoice_number`, `warranty_notes`, `warranty_ticket_number`, `warranty_label`, `warranty_client_name`, `warranty_supplier_id`) VALUES
+(27, 'SSD WD 500GB', 'Backup alana cuidado!', NULL, 'SSD', 'WD', 'WD5000LPCX', NULL, 'IT-SSD-1759411924-9678', NULL, NULL, 1, 5, 100, 100.00, 'Prateira 1', 'available', NULL, 'img_68de7e9748df18.34388998.jpg', NULL, '2025-10-02 13:32:04', '2025-11-19 18:07:36', 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+(28, 'HD 500GB', '', NULL, 'HDD', 'Samsung', 'ST500LM012', NULL, 'IT-HDD-1759493066-6607', NULL, 'SN3265552', 2, 5, 100, 0.00, '', 'available', NULL, 'img_68dfbbb4e4d929.37907428.jpg', NULL, '2025-10-03 12:04:26', '2025-11-19 18:10:12', 1, NULL, 'Distribuidor', 23, 'months', '2025-11-12', '2027-10-12', 'zx\\', 'Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.', '123123', '1231231', 'GIGI', 18),
+(29, 'A', 'A', NULL, 'CPU', 'A', 'A', NULL, 'A', 'A', 'A', 1, 5, 100, 1.00, 'A', 'available', NULL, '', NULL, '2025-11-12 19:46:31', '2025-11-19 18:11:23', 1, NULL, 'Fabricante', 12, 'months', '2025-11-19', '2026-11-19', '12331231', 'Suporte técnico incluído. Manutenção preventiva coberta. Peças e mão de obra incluídas.', '2131', '32131', 'GAGa', 18);
+
+--
+-- Acionadores `products`
+--
+DROP TRIGGER IF EXISTS `trg_product_warranty_update`;
+DELIMITER $$
+CREATE TRIGGER `trg_product_warranty_update` AFTER UPDATE ON `products` FOR EACH ROW BEGIN
+    IF (
+        OLD.warranty_provider != NEW.warranty_provider OR
+        OLD.warranty_start_date != NEW.warranty_start_date OR
+        OLD.warranty_end_date != NEW.warranty_end_date OR
+        OLD.warranty_notes != NEW.warranty_notes OR
+        OLD.warranty_period_value != NEW.warranty_period_value OR
+        OLD.warranty_period_unit != NEW.warranty_period_unit
+    ) THEN
+        INSERT INTO warranty_history (
+            product_id,
+            user_id,
+            action_type,
+            old_values,
+            new_values,
+            change_description
+        ) VALUES (
+            NEW.id,
+            IF(@current_user_id IS NULL, 1, @current_user_id),
+            'UPDATE',
+            JSON_OBJECT(
+                'warranty_provider', OLD.warranty_provider,
+                'warranty_start_date', OLD.warranty_start_date,
+                'warranty_end_date', OLD.warranty_end_date,
+                'warranty_notes', OLD.warranty_notes,
+                'warranty_period_value', OLD.warranty_period_value,
+                'warranty_period_unit', OLD.warranty_period_unit
+            ),
+            JSON_OBJECT(
+                'warranty_provider', NEW.warranty_provider,
+                'warranty_start_date', NEW.warranty_start_date,
+                'warranty_end_date', NEW.warranty_end_date,
+                'warranty_notes', NEW.warranty_notes,
+                'warranty_period_value', NEW.warranty_period_value,
+                'warranty_period_unit', NEW.warranty_period_unit
+            ),
+            'Garantia atualizada automaticamente'
+        );
+    END IF;
+END
+$$
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -160,34 +544,32 @@ INSERT INTO `products` (`id`, `name`, `description`, `category`, `manufacturer`,
 -- Estrutura para tabela `product_inputs`
 --
 
-CREATE TABLE `product_inputs` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `product_inputs`;
+CREATE TABLE IF NOT EXISTS `product_inputs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `product_id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
   `quantity_added` int(11) NOT NULL,
   `reason` varchar(255) NOT NULL,
   `details` text DEFAULT NULL,
-  `unit_price` decimal(10,2) DEFAULT NULL,
+  `unit_price` decimal(12,2) DEFAULT NULL,
   `input_date` timestamp NOT NULL DEFAULT current_timestamp(),
   `product_name` varchar(255) DEFAULT NULL,
   `product_category` varchar(100) DEFAULT NULL,
   `product_serial_number` varchar(100) DEFAULT NULL,
-  `product_barcode` varchar(100) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `product_barcode` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `product_inputs`
 --
 
-INSERT INTO `product_inputs` (`id`, `product_id`, `user_id`, `quantity_added`, `reason`, `details`, `unit_price`, `input_date`, `product_name`, `product_category`, `product_serial_number`, `product_barcode`) VALUES
-(1, 5, 1, 1, 'Ajuste de Inventário', '', NULL, '2025-09-24 20:23:52', 'weqqw', 'SSD', NULL, 'IT-SSD-1758742030-2051'),
-(2, 5, 1, 1, 'Compra de Fornecedor', '', NULL, '2025-09-24 20:23:57', 'weqqw', 'SSD', NULL, 'IT-SSD-1758742030-2051'),
-(3, 6, 1, 20, 'Compra de Fornecedor', '', NULL, '2025-09-24 20:50:45', '12313', 'GPU', NULL, 'IT-GPU-1758745897-6019'),
-(4, 6, 1, 2, 'Compra de Fornecedor', '', NULL, '2025-09-24 20:53:41', '12313', 'GPU', NULL, 'IT-GPU-1758745897-6019'),
-(5, 6, 1, 3, 'Ajuste de Inventário', '', NULL, '2025-09-25 11:46:42', '12313', 'GPU', 'AA2131', 'IT-GPU-1758745897-6019'),
-(6, 9, 1, 1, 'Compra de Fornecedor', '', NULL, '2025-09-25 13:01:05', 'qwerqwer', 'Case', NULL, 'IT-CASE-1758805254-1988'),
-(7, 9, 1, 1, 'Compra de Fornecedor', '', NULL, '2025-09-25 13:13:42', 'qwerqwer', 'Case', NULL, 'IT-CASE-1758805254-1988'),
-(8, 9, 1, 1, 'Compra de Fornecedor', '', NULL, '2025-09-25 13:18:26', 'qwerqwer', 'Case', NULL, 'IT-CASE-1758805254-1988');
+INSERT IGNORE INTO `product_inputs` (`id`, `product_id`, `user_id`, `quantity_added`, `reason`, `details`, `unit_price`, `input_date`, `product_name`, `product_category`, `product_serial_number`, `product_barcode`) VALUES
+(37, 27, 1, 1, 'Compra de Fornecedor', '', 100.00, '2025-10-03 11:34:23', 'SSD WD 500GB', 'SSD', NULL, 'IT-SSD-1759411924-9678'),
+(38, 28, 1, 1, 'Compra de Fornecedor', '', 0.00, '2025-10-14 18:47:16', 'HD 500GB', 'HDD', NULL, 'IT-HDD-1759493066-6607'),
+(39, 28, 1, 1, 'Compra de Fornecedor', '', 0.00, '2025-11-11 16:24:50', 'HD 500GB', 'HDD', 'SN3265553', 'IT-HDD-1759493066-6607');
 
 -- --------------------------------------------------------
 
@@ -195,8 +577,9 @@ INSERT INTO `product_inputs` (`id`, `product_id`, `user_id`, `quantity_added`, `
 -- Estrutura para tabela `product_movements`
 --
 
-CREATE TABLE `product_movements` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `product_movements`;
+CREATE TABLE IF NOT EXISTS `product_movements` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `product_id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
   `movement_type` varchar(50) NOT NULL,
@@ -204,19 +587,25 @@ CREATE TABLE `product_movements` (
   `previous_quantity` int(11) NOT NULL,
   `new_quantity` int(11) NOT NULL,
   `reason` text DEFAULT NULL,
-  `movement_date` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `movement_date` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `product_id` (`product_id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `product_movements`
 --
 
-INSERT INTO `product_movements` (`id`, `product_id`, `user_id`, `movement_type`, `quantity`, `previous_quantity`, `new_quantity`, `reason`, `movement_date`) VALUES
-(25, 9, 1, 'entrada', 10, 0, 10, 'Produto criado: qwerqwer', '2025-09-25 13:00:54'),
-(26, 9, 1, 'saida', 1, 10, 9, 'Venda - ', '2025-09-25 13:00:59'),
-(27, 9, 1, 'entrada', 1, 9, 10, 'Compra de Fornecedor', '2025-09-25 13:01:05'),
-(28, 9, 1, 'entrada', 1, 10, 11, 'Compra de Fornecedor', '2025-09-25 13:13:42'),
-(29, 9, 1, 'entrada', 1, 11, 12, 'Compra de Fornecedor', '2025-09-25 13:18:26');
+INSERT IGNORE INTO `product_movements` (`id`, `product_id`, `user_id`, `movement_type`, `quantity`, `previous_quantity`, `new_quantity`, `reason`, `movement_date`) VALUES
+(92, 27, 1, 'entrada', 1, 0, 1, 'Produto criado: SSD WD 500GB', '2025-10-02 13:32:04'),
+(93, 27, 1, 'saida', 1, 1, 0, 'Venda - ', '2025-10-03 11:33:54'),
+(94, 27, 1, 'entrada', 1, 0, 1, 'Compra de Fornecedor', '2025-10-03 11:34:23'),
+(95, 28, 1, 'entrada', 1, 0, 1, 'Produto criado: HD 500GB', '2025-10-03 12:04:26'),
+(96, 28, 1, 'entrada', 1, 1, 2, 'Compra de Fornecedor', '2025-10-14 18:47:16'),
+(97, 28, 1, 'entrada', 1, 2, 3, 'Compra de Fornecedor', '2025-11-11 16:24:50'),
+(98, 28, 1, 'saida', 1, 3, 2, 'Uso Interno - ', '2025-11-11 16:24:58'),
+(99, 29, 1, 'entrada', 1, 0, 1, 'Produto criado: A', '2025-11-12 19:46:31');
 
 -- --------------------------------------------------------
 
@@ -224,33 +613,31 @@ INSERT INTO `product_movements` (`id`, `product_id`, `user_id`, `movement_type`,
 -- Estrutura para tabela `product_outputs`
 --
 
-CREATE TABLE `product_outputs` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `product_outputs`;
+CREATE TABLE IF NOT EXISTS `product_outputs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `product_id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
   `quantity_removed` int(11) NOT NULL,
   `reason` varchar(255) NOT NULL,
   `details` text DEFAULT NULL,
-  `unit_price` decimal(10,2) DEFAULT NULL,
+  `unit_price` decimal(12,2) DEFAULT NULL,
   `output_date` timestamp NOT NULL DEFAULT current_timestamp(),
   `product_name` varchar(255) DEFAULT NULL,
   `product_category` varchar(100) DEFAULT NULL,
   `product_serial_number` varchar(100) DEFAULT NULL,
-  `product_barcode` varchar(100) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `product_barcode` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `product_outputs`
 --
 
-INSERT INTO `product_outputs` (`id`, `product_id`, `user_id`, `quantity_removed`, `reason`, `details`, `unit_price`, `output_date`, `product_name`, `product_category`, `product_serial_number`, `product_barcode`) VALUES
-(1, 2, 1, 2, 'Uso Interno', '', NULL, '2025-09-24 19:06:28', 'dsFAASDF', 'PSU', 'SADFAS', '1758740313263'),
-(2, 5, 1, 1, 'Venda', '', NULL, '2025-09-24 20:13:17', 'weqqw', 'SSD', NULL, 'IT-SSD-1758742030-2051'),
-(3, 6, 1, 1, 'Venda', '', NULL, '2025-09-24 20:50:50', '12313', 'GPU', NULL, 'IT-GPU-1758745897-6019'),
-(4, 6, 1, 20, 'Perda ou Roubo', '', NULL, '2025-09-24 20:53:23', '12313', 'GPU', NULL, 'IT-GPU-1758745897-6019'),
-(5, 6, 1, 1, 'Venda', '', NULL, '2025-09-25 11:46:34', '12313', 'GPU', 'AA2131', 'IT-GPU-1758745897-6019'),
-(6, 7, 1, 1, 'Venda', 'Cliente/Depto: falo de tal', 100.00, '2025-09-25 12:33:16', 'twqr4w', 'GPU', 'wrtw', '1758803583918'),
-(7, 9, 1, 1, 'Venda', '', 1000.00, '2025-09-25 13:00:59', 'qwerqwer', 'Case', NULL, 'IT-CASE-1758805254-1988');
+INSERT IGNORE INTO `product_outputs` (`id`, `product_id`, `user_id`, `quantity_removed`, `reason`, `details`, `unit_price`, `output_date`, `product_name`, `product_category`, `product_serial_number`, `product_barcode`) VALUES
+(25, 27, 1, 1, 'Venda', '', 100.00, '2025-10-03 11:33:54', 'SSD WD 500GB', 'SSD', NULL, 'IT-SSD-1759411924-9678'),
+(26, 28, 1, 1, 'Uso Interno', '', 0.00, '2025-11-11 16:24:58', 'HD 500GB', 'HDD', 'SN3265553', 'IT-HDD-1759493066-6607');
 
 -- --------------------------------------------------------
 
@@ -258,10 +645,12 @@ INSERT INTO `product_outputs` (`id`, `product_id`, `user_id`, `quantity_removed`
 -- Estrutura para tabela `ready_machines`
 --
 
-CREATE TABLE `ready_machines` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `ready_machines`;
+CREATE TABLE IF NOT EXISTS `ready_machines` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `description` text DEFAULT NULL,
+  `category_id` int(11) DEFAULT NULL,
   `processor` varchar(255) DEFAULT NULL,
   `memory` varchar(255) DEFAULT NULL,
   `storage` varchar(255) DEFAULT NULL,
@@ -270,8 +659,8 @@ CREATE TABLE `ready_machines` (
   `power_supply` varchar(255) DEFAULT NULL,
   `case_type` varchar(255) DEFAULT NULL,
   `specifications` text DEFAULT NULL,
-  `sale_price` decimal(10,2) NOT NULL,
-  `cost_price` decimal(10,2) DEFAULT NULL,
+  `sale_price` decimal(12,2) DEFAULT NULL,
+  `cost_price` decimal(12,2) DEFAULT NULL,
   `serial_number` varchar(100) DEFAULT NULL,
   `barcode` varchar(100) DEFAULT NULL,
   `qr_code` varchar(100) DEFAULT NULL,
@@ -283,15 +672,30 @@ CREATE TABLE `ready_machines` (
   `windows_10_compatible` tinyint(1) DEFAULT 0,
   `windows_11_compatible` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `serial_number` (`serial_number`),
+  UNIQUE KEY `barcode` (`barcode`),
+  UNIQUE KEY `qr_code` (`qr_code`),
+  KEY `fk_machine_category` (`category_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura para tabela `remember_me_tokens`
+--
+
+DROP TABLE IF EXISTS `remember_me_tokens`;
+CREATE TABLE IF NOT EXISTS `remember_me_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `token` varchar(255) NOT NULL,
+  `expires_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`),
+  KEY `user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Despejando dados para a tabela `ready_machines`
---
-
-INSERT INTO `ready_machines` (`id`, `name`, `description`, `processor`, `memory`, `storage`, `graphics`, `motherboard`, `power_supply`, `case_type`, `specifications`, `sale_price`, `cost_price`, `serial_number`, `barcode`, `qr_code`, `quantity`, `status`, `location`, `image`, `notes`, `windows_10_compatible`, `windows_11_compatible`, `created_at`, `updated_at`) VALUES
-(6, 'we', 'wqe', '', '', '', '', '', '', '', '', 100.00, 100.00, NULL, NULL, NULL, 20, 'available', NULL, NULL, NULL, 0, 0, '2025-09-25 12:44:15', '2025-09-25 12:44:40');
 
 -- --------------------------------------------------------
 
@@ -299,23 +703,24 @@ INSERT INTO `ready_machines` (`id`, `name`, `description`, `processor`, `memory`
 -- Estrutura para tabela `system_logs`
 --
 
-CREATE TABLE `system_logs` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `system_logs`;
+CREATE TABLE IF NOT EXISTS `system_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) DEFAULT NULL,
   `action` varchar(255) NOT NULL,
   `details` text DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `system_logs`
 --
 
-INSERT INTO `system_logs` (`id`, `user_id`, `action`, `details`, `ip_address`, `timestamp`) VALUES
-(1, 1, 'login', 'Usuário \'admin\' fez login no sistema', '::1', '2025-09-24 18:57:44'),
-(2, 1, 'login', 'Usuário \'admin\' fez login no sistema', '::1', '2025-09-24 20:30:50'),
-(3, 1, 'login', 'Usuário \'admin\' fez login no sistema', '::1', '2025-09-24 20:35:47');
+INSERT IGNORE INTO `system_logs` (`id`, `user_id`, `action`, `details`, `ip_address`, `timestamp`) VALUES
+(5, 1, 'create_warranty_template', 'Template: bi', '::1', '2025-11-12 19:21:00');
 
 -- --------------------------------------------------------
 
@@ -323,27 +728,24 @@ INSERT INTO `system_logs` (`id`, `user_id`, `action`, `details`, `ip_address`, `
 -- Estrutura para tabela `system_settings`
 --
 
-CREATE TABLE `system_settings` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `system_settings`;
+CREATE TABLE IF NOT EXISTS `system_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `setting_key` varchar(100) NOT NULL,
   `setting_value` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `setting_key` (`setting_key`)
+) ENGINE=InnoDB AUTO_INCREMENT=378 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `system_settings`
 --
 
-INSERT INTO `system_settings` (`id`, `setting_key`, `setting_value`, `created_at`, `updated_at`) VALUES
-(1, 'site_name', 'Sistema de Estoque TI', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(2, 'company_name', 'Sua Empresa', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(3, 'company_slogan', 'Sistema completo de controle de estoque de TI', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(4, 'company_logo', '', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(5, 'theme', 'light', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(6, 'backup_frequency', 'daily', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(7, 'low_stock_alert', '5', '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(8, 'system_version', '1.0', '2025-09-24 18:57:20', '2025-09-24 18:57:20');
+INSERT IGNORE INTO `system_settings` (`id`, `setting_key`, `setting_value`, `created_at`, `updated_at`) VALUES
+(343, 'company_logo', 'assets/img/logo_1759411371.png', '2025-10-02 12:07:14', '2025-10-02 13:22:51'),
+(344, 'user_theme_1', 'light', '2025-10-02 13:19:44', '2025-11-17 13:02:21');
 
 -- --------------------------------------------------------
 
@@ -351,199 +753,220 @@ INSERT INTO `system_settings` (`id`, `setting_key`, `setting_value`, `created_at
 -- Estrutura para tabela `users`
 --
 
-CREATE TABLE `users` (
-  `id` int(11) NOT NULL,
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE IF NOT EXISTS `users` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
   `email` varchar(100) NOT NULL,
   `role` varchar(20) DEFAULT 'user',
   `full_name` varchar(255) DEFAULT NULL,
+  `avatar` varchar(255) DEFAULT NULL,
   `last_login` timestamp NULL DEFAULT NULL,
+  `reset_token` varchar(64) DEFAULT NULL,
+  `reset_token_expires_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `theme` varchar(50) DEFAULT 'blue',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`),
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Despejando dados para a tabela `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `password`, `email`, `role`, `full_name`, `last_login`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 'admin123', 'admin@sistema.com', 'admin', 'Administrador do Sistema', NULL, '2025-09-24 18:57:20', '2025-09-24 20:35:47'),
-(2, 'user', 'user123', 'user@sistema.com', 'user', 'Usuário Padrão', NULL, '2025-09-24 18:57:20', '2025-09-24 18:57:20'),
-(3, 'felipe', 'abc,123', 'suporte02@supportti.net', 'user', 'felipe', NULL, '2025-09-24 20:54:48', '2025-09-24 20:55:02');
+INSERT IGNORE INTO `users` (`id`, `username`, `password`, `email`, `role`, `full_name`, `avatar`, `last_login`, `reset_token`, `reset_token_expires_at`, `created_at`, `updated_at`, `theme`) VALUES
+(1, 'admin', 'admin123', 'admin@sistema.com', 'admin', 'Administrador do Sistema', NULL, '2025-11-19 17:43:55', NULL, NULL, '2025-09-24 18:57:20', '2025-11-19 17:43:55', 'purple'),
+(2, 'user', 'user123', 'user@sistema.com', 'user', 'Usuário Padrão', 'avatar_2_1758833318.png', '2025-09-30 19:38:10', NULL, NULL, '2025-09-24 18:57:20', '2025-09-30 19:38:10', 'blue'),
+(3, 'felipe', 'abc,123', 'suporte02@supportti.net', 'admin', 'felipe', NULL, '2025-09-25 14:46:25', NULL, NULL, '2025-09-24 20:54:48', '2025-09-29 20:26:57', 'blue'),
+(4, 'Ryan', '@#8520@#', 'suporte03@supportti.net', 'admin', '', 'avatar_4_1759154926.png', '2025-10-01 20:57:47', NULL, NULL, '2025-09-25 20:35:20', '2025-10-01 20:57:47', 'blue'),
+(5, 'Jux', 'Jux123', 'suporte04@supportti.net', 'admin', '', NULL, '2025-09-26 12:22:03', NULL, NULL, '2025-09-26 12:03:54', '2025-09-26 12:22:03', 'blue'),
+(6, 'William', '@#8520@#', 'willianvalentim9@gmail.com', 'user', '', NULL, NULL, '75a7d1aff32d182f5d22e7bcb203b3a74c0178c50d5b8f4235e9e2f2d782a96e', '2025-09-26 16:02:47', '2025-09-26 12:39:37', '2025-09-26 13:02:47', 'blue'),
+(7, 'Cleber', '@#8520@#', 'direcao@supportti.net', 'admin', '', NULL, NULL, NULL, NULL, '2025-09-29 13:03:03', '2025-09-29 13:03:03', 'blue');
+
+-- --------------------------------------------------------
+
+-- --------------------------------------------------------
 
 --
--- Índices para tabelas despejadas
+-- Estrutura para tabela `warranty_claims`
 --
 
---
--- Índices de tabela `admin_logs`
---
-ALTER TABLE `admin_logs`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
+DROP TABLE IF EXISTS `warranty_claims`;
+CREATE TABLE IF NOT EXISTS `warranty_claims` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `product_id` int(11) NOT NULL COMMENT 'ID do produto com problema',
+  `user_id` int(11) NOT NULL COMMENT 'ID do usuário que abriu o chamado',
+  `claim_date` date NOT NULL COMMENT 'Data do acionamento da garantia',
+  `problem_type` varchar(100) DEFAULT NULL COMMENT 'Tipo do problema (ex: Defeito Eletrônico, Dano Físico)',
+  `description` text NOT NULL COMMENT 'Descrição detalhada do problema',
+  `status` enum('open','in_analysis','in_repair','resolved','denied') DEFAULT 'open' COMMENT 'Status do chamado',
+  `resolution` varchar(100) DEFAULT NULL COMMENT 'Como foi resolvido (ex: Reparado, Substituído)',
+  `resolution_date` date DEFAULT NULL COMMENT 'Data da resolução',
+  `notes` text DEFAULT NULL COMMENT 'Notas adicionais do técnico/suporte',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT 'Data de criação do chamado',
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT 'Última atualização',
+  PRIMARY KEY (`id`),
+  KEY `idx_product_id` (`product_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_claim_date` (`claim_date`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_product_status` (`product_id`,`status`),
+  KEY `idx_status_date` (`status`,`claim_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Registro de acionamentos/reclamações de garantia';
+
+-- --------------------------------------------------------
 
 --
--- Índices de tabela `machine_inputs`
---
-ALTER TABLE `machine_inputs`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `machine_id` (`machine_id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `machine_movements`
---
-ALTER TABLE `machine_movements`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `machine_id` (`machine_id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `machine_outputs`
---
-ALTER TABLE `machine_outputs`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `products`
---
-ALTER TABLE `products`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `sku` (`sku`),
-  ADD UNIQUE KEY `barcode` (`barcode`),
-  ADD UNIQUE KEY `qr_code` (`qr_code`),
-  ADD UNIQUE KEY `serial_number` (`serial_number`);
-
---
--- Índices de tabela `product_inputs`
---
-ALTER TABLE `product_inputs`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `product_movements`
---
-ALTER TABLE `product_movements`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `product_id` (`product_id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `product_outputs`
---
-ALTER TABLE `product_outputs`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `ready_machines`
---
-ALTER TABLE `ready_machines`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `serial_number` (`serial_number`),
-  ADD UNIQUE KEY `barcode` (`barcode`),
-  ADD UNIQUE KEY `qr_code` (`qr_code`);
-
---
--- Índices de tabela `system_logs`
---
-ALTER TABLE `system_logs`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
-
---
--- Índices de tabela `system_settings`
---
-ALTER TABLE `system_settings`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `setting_key` (`setting_key`);
-
---
--- Índices de tabela `users`
---
-ALTER TABLE `users`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `username` (`username`),
-  ADD UNIQUE KEY `email` (`email`);
-
---
--- AUTO_INCREMENT para tabelas despejadas
+-- Estrutura para tabela `warranty_history`
 --
 
---
--- AUTO_INCREMENT de tabela `admin_logs`
---
-ALTER TABLE `admin_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+DROP TABLE IF EXISTS `warranty_history`;
+CREATE TABLE IF NOT EXISTS `warranty_history` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `product_id` int(11) NOT NULL COMMENT 'ID do produto',
+  `user_id` int(11) NOT NULL COMMENT 'ID do usuário que fez a alteração',
+  `action_type` enum('CREATE','UPDATE','DELETE','CLAIM') NOT NULL DEFAULT 'UPDATE' COMMENT 'Tipo de ação realizada',
+  `old_values` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Valores anteriores em formato JSON' CHECK (json_valid(`old_values`)),
+  `new_values` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Novos valores em formato JSON' CHECK (json_valid(`new_values`)),
+  `change_description` varchar(500) DEFAULT NULL COMMENT 'Descrição da alteração (motivo)',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT 'Data e hora da alteração',
+  PRIMARY KEY (`id`),
+  KEY `idx_product_id` (`product_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_action_type` (`action_type`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_product_date` (`product_id`,`created_at`),
+  KEY `idx_action_type_date` (`action_type`,`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Histórico completo de alterações em garantias';
 
 --
--- AUTO_INCREMENT de tabela `machine_inputs`
+-- Despejando dados para a tabela `warranty_history`
 --
-ALTER TABLE `machine_inputs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+INSERT IGNORE INTO `warranty_history` (`id`, `product_id`, `user_id`, `action_type`, `old_values`, `new_values`, `change_description`, `created_at`) VALUES
+(1, 28, 1, 'UPDATE', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-02-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 3, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-03-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 4, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 14:44:57'),
+(2, 28, 1, 'UPDATE', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-03-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 4, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-04-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 5, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 18:38:58'),
+(3, 28, 1, 'UPDATE', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-04-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 5, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-05-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 6, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 19:00:18'),
+(4, 28, 1, 'UPDATE', '{\"warranty_provider\": \"\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-05-12\", \"warranty_notes\": \"\", \"warranty_period_value\": 6, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-11-12\", \"warranty_notes\": \"TESTE\", \"warranty_period_value\": 12, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 19:07:50'),
+(5, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-11-12\", \"warranty_notes\": \"TESTE\", \"warranty_period_value\": 12, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-08-12\", \"warranty_notes\": \"TESTE\", \"warranty_period_value\": 9, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:37:32'),
+(6, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-11-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"TESTE\",\"warranty_period_value\":12,\"warranty_period_unit\":\"months\"}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-08-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"TESTE\",\"warranty_period_value\":9,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:37:32'),
+(7, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-08-12\", \"warranty_notes\": \"TESTE\", \"warranty_period_value\": 9, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-09-12\", \"warranty_notes\": \"TESTE\", \"warranty_period_value\": 10, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:37:41'),
+(8, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-08-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"TESTE\",\"warranty_period_value\":9,\"warranty_period_unit\":\"months\"}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-09-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"TESTE\",\"warranty_period_value\":10,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:37:41'),
+(9, 28, 1, 'UPDATE', '{\"warranty_provider\":\"Antigo\"}', '{\"warranty_provider\":\"Novo\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:37:52'),
+(10, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-09-12\", \"warranty_notes\": \"TESTE\", \"warranty_period_value\": 10, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2027-01-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 14, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:38:25'),
+(11, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-09-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"TESTE\",\"warranty_period_value\":10,\"warranty_period_unit\":\"months\"}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-01-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":14,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:38:25'),
+(12, 28, 1, 'UPDATE', '{\"warranty_provider\":\"Antigo\"}', '{\"warranty_provider\":\"Novo\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:38:32'),
+(13, 28, 1, 'UPDATE', '{\"warranty_provider\":\"Antigo\"}', '{\"warranty_provider\":\"Novo\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:38:33'),
+(14, 28, 1, 'UPDATE', '{\"warranty_provider\":\"Antigo\"}', '{\"warranty_provider\":\"Novo\"}', 'Garantia atualizada automaticamente', '2025-11-12 20:40:10'),
+(15, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2027-01-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 14, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2025-12-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 1, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:03:12'),
+(16, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-01-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":14,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":null,\"warranty_label\":null,\"warranty_client_name\":null,\"warranty_supplier_id\":null}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2025-12-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":1,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:03:12'),
+(17, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2025-12-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 1, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-01-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 2, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:21:39'),
+(18, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2025-12-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":1,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":null}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-01-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":2,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:21:39'),
+(19, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-01-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":2,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":17}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-01-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":2,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:27:11'),
+(20, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2026-01-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 2, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2025-12-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 1, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:41:04'),
+(21, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2026-01-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":2,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":null}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2025-12-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":1,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-17 13:41:04'),
+(22, 28, 1, 'UPDATE', '{\"warranty_provider\": \"TESTE\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2025-12-12\", \"warranty_notes\": \"AAA\", \"warranty_period_value\": 1, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"Distribuidor\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2027-11-12\", \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\", \"warranty_period_value\": 24, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:08:45'),
+(23, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2025-12-12\",\"warranty_provider\":\"TESTE\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"AAA\",\"warranty_period_value\":1,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":null}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-11-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":24,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:08:45'),
+(24, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-11-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":24,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":null}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-11-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":24,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:08:46'),
+(25, 28, 1, 'UPDATE', '{\"warranty_provider\": \"Distribuidor\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2027-11-12\", \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\", \"warranty_period_value\": 24, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"Distribuidor\", \"warranty_start_date\": \"2025-11-12\", \"warranty_end_date\": \"2027-10-12\", \"warranty_notes\": \"Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.\", \"warranty_period_value\": 23, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:10:11'),
+(26, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-11-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":24,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":null}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-10-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":23,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:10:11'),
+(27, 28, 1, 'UPDATE', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-10-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":23,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":\"123123\",\"warranty_label\":\"1231231\",\"warranty_client_name\":\"GIGI\",\"warranty_supplier_id\":18}', '{\"id\":28,\"name\":\"HD 500GB\",\"warranty_start_date\":\"2025-11-12\",\"warranty_end_date\":\"2027-10-12\",\"warranty_provider\":\"Distribuidor\",\"invoice_number\":\"zx\\\\\",\"warranty_notes\":\"Inclui frete de ida e volta. Garantia contra defeitos de f\\u00e1brica. Cobre reparos ou reposi\\u00e7\\u00e3o.\",\"warranty_period_value\":23,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:10:12'),
+(28, 29, 1, 'UPDATE', '{\"warranty_provider\": \"\", \"warranty_start_date\": null, \"warranty_end_date\": null, \"warranty_notes\": \"\", \"warranty_period_value\": null, \"warranty_period_unit\": \"months\"}', '{\"warranty_provider\": \"Fabricante\", \"warranty_start_date\": \"2025-11-19\", \"warranty_end_date\": \"2026-11-19\", \"warranty_notes\": \"Suporte técnico incluído. Manutenção preventiva coberta. Peças e mão de obra incluídas.\", \"warranty_period_value\": 12, \"warranty_period_unit\": \"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:11:23'),
+(29, 29, 1, 'UPDATE', '{\"id\":29,\"name\":\"A\",\"warranty_start_date\":null,\"warranty_end_date\":null,\"warranty_provider\":\"\",\"invoice_number\":\"\",\"warranty_notes\":\"\",\"warranty_period_value\":null,\"warranty_period_unit\":\"months\",\"warranty_ticket_number\":null,\"warranty_label\":null,\"warranty_client_name\":null,\"warranty_supplier_id\":null}', '{\"id\":29,\"name\":\"A\",\"warranty_start_date\":\"2025-11-19\",\"warranty_end_date\":\"2026-11-19\",\"warranty_provider\":\"Fabricante\",\"invoice_number\":\"12331231\",\"warranty_notes\":\"Suporte t\\u00e9cnico inclu\\u00eddo. Manuten\\u00e7\\u00e3o preventiva coberta. Pe\\u00e7as e m\\u00e3o de obra inclu\\u00eddas.\",\"warranty_period_value\":12,\"warranty_period_unit\":\"months\"}', 'Garantia atualizada automaticamente', '2025-11-19 18:11:23');
+
+-- --------------------------------------------------------
 
 --
--- AUTO_INCREMENT de tabela `machine_movements`
+-- Estrutura para tabela `warranty_suppliers`
 --
-ALTER TABLE `machine_movements`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+
+DROP TABLE IF EXISTS `warranty_suppliers`;
+CREATE TABLE IF NOT EXISTS `warranty_suppliers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL COMMENT 'Nome da empresa fornecedora',
+  `cnpj` varchar(18) DEFAULT NULL COMMENT 'CNPJ da empresa',
+  `contact_person` varchar(255) DEFAULT NULL COMMENT 'Pessoa de contato',
+  `email` varchar(100) DEFAULT NULL COMMENT 'Email para contato',
+  `phone` varchar(20) DEFAULT NULL COMMENT 'Telefone para contato',
+  `mobile` varchar(20) DEFAULT NULL COMMENT 'Celular para contato',
+  `website` varchar(255) DEFAULT NULL COMMENT 'Website da empresa',
+  `address_street` varchar(255) DEFAULT NULL COMMENT 'Rua/Avenida',
+  `address_number` varchar(10) DEFAULT NULL COMMENT 'Numero',
+  `address_complement` varchar(255) DEFAULT NULL COMMENT 'Complemento',
+  `address_neighborhood` varchar(100) DEFAULT NULL COMMENT 'Bairro',
+  `address_city` varchar(100) DEFAULT NULL COMMENT 'Cidade',
+  `address_state` varchar(2) DEFAULT NULL COMMENT 'Estado (UF)',
+  `address_postal_code` varchar(10) DEFAULT NULL COMMENT 'CEP',
+  `warranty_policy` text DEFAULT NULL COMMENT 'Politica de garantia',
+  `payment_terms` varchar(100) DEFAULT NULL COMMENT 'Termos de pagamento',
+  `notes` text DEFAULT NULL COMMENT 'Observações gerais',
+  `is_active` tinyint(1) DEFAULT 1 COMMENT 'Status ativo/inativo',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT 'Data de cria├º├úo',
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT 'Data da ├║ltima atualiza├º├úo',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `cnpj` (`cnpj`),
+  KEY `idx_name` (`name`),
+  KEY `idx_cnpj` (`cnpj`),
+  KEY `idx_is_active` (`is_active`)
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
--- AUTO_INCREMENT de tabela `machine_outputs`
+-- Despejando dados para a tabela `warranty_suppliers`
 --
-ALTER TABLE `machine_outputs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+
+INSERT IGNORE INTO `warranty_suppliers` (`id`, `name`, `cnpj`, `contact_person`, `email`, `phone`, `mobile`, `website`, `address_street`, `address_number`, `address_complement`, `address_neighborhood`, `address_city`, `address_state`, `address_postal_code`, `warranty_policy`, `payment_terms`, `notes`, `is_active`, `created_at`, `updated_at`) VALUES
+(18, 'LOL', '10.010', 'LOL', 'LOL@gmail.com', '(55) 9999-99999', '(55) 99999-9999', 'https://192.168.25.19:8081/browse/TICKET-39698', 'Rua dos Garis', '98', 'casa', 'Diehl', 'Novo Hamburgo', 'RS', '93530-380', 'ASDSAD', 'sadasd', 'sadasd', 1, '2025-11-19 18:09:07', '2025-11-19 18:09:23');
+
+-- --------------------------------------------------------
 
 --
--- AUTO_INCREMENT de tabela `products`
+-- Estrutura para tabela `warranty_templates`
 --
-ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+
+DROP TABLE IF EXISTS `warranty_templates`;
+CREATE TABLE IF NOT EXISTS `warranty_templates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL COMMENT 'Nome do template (ex: Eletrônicos Padrão)',
+  `description` text DEFAULT NULL COMMENT 'Descrição detalhada do template',
+  `period_value` int(11) NOT NULL COMMENT 'Valor do período (ex: 12)',
+  `period_unit` enum('days','months','years') NOT NULL DEFAULT 'months' COMMENT 'Unidade do período',
+  `warranty_provider` varchar(255) DEFAULT NULL COMMENT 'Fornecedor padrão da garantia',
+  `warranty_notes` text DEFAULT NULL COMMENT 'Notas padrão que aparecem em todas as garantias deste template',
+  `is_active` tinyint(1) DEFAULT 1 COMMENT '1 = Ativo, 0 = Inativo',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT 'Data de criação',
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT 'Última atualização',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`),
+  KEY `idx_is_active` (`is_active`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Templates de garantia pré-configurados';
 
 --
--- AUTO_INCREMENT de tabela `product_inputs`
+-- Despejando dados para a tabela `warranty_templates`
 --
-ALTER TABLE `product_inputs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+
+INSERT IGNORE INTO `warranty_templates` (`id`, `name`, `description`, `period_value`, `period_unit`, `warranty_provider`, `warranty_notes`, `is_active`, `created_at`, `updated_at`) VALUES
+(1, 'Eletrônicos Padrão', 'Garantia padrão para eletrônicos comuns como monitors, fontes, etc.', 12, 'months', 'Fabricante', 'Cobertura contra defeitos de fabricação. Não cobre: danos por queda, queimadas, exposição a líquidos, modificações não autorizadas.', 1, '2025-11-12 13:54:39', '2025-11-12 20:23:04'),
+(2, 'Componentes PC', 'Garantia estendida para componentes de computador (CPU, RAM, SSD, HDD, Motherboard)', 24, 'months', 'Distribuidor', 'Inclui frete de ida e volta. Garantia contra defeitos de fábrica. Cobre reparos ou reposição.', 1, '2025-11-12 13:54:39', '2025-11-12 19:00:55'),
+(3, 'Periféricos', 'Garantia para periféricos como mouse, teclado, webcam, headset', 6, 'months', 'Fornecedor', 'Defeitos de fábrica apenas. Não cobre: danos físicos, desgaste natural, uso indevido.', 1, '2025-11-12 13:54:39', '2025-11-12 13:54:39'),
+(4, 'Impressoras', 'Garantia completa para impressoras com suporte técnico', 12, 'months', 'Fabricante', 'Suporte técnico incluído. Manutenção preventiva coberta. Peças e mão de obra incluídas.', 1, '2025-11-12 13:54:39', '2025-11-12 13:54:39'),
+(5, 'Software/Licenças', 'Licenças de software com suporte técnico e atualizações', 12, 'months', 'Desenvolvedor', 'Inclui atualizações de segurança e novas funcionalidades. Suporte por email/telefone.', 1, '2025-11-12 13:54:39', '2025-11-12 13:54:39'),
+(6, 'Garantia Customizada', 'Template vazio para configurações personalizadas', 1, 'months', '', '', 1, '2025-11-12 13:54:39', '2025-11-12 13:54:39');
+
+-- --------------------------------------------------------
 
 --
--- AUTO_INCREMENT de tabela `product_movements`
+-- Estrutura para view `vw_warranty_status_summary`
 --
-ALTER TABLE `product_movements`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+DROP TABLE IF EXISTS `vw_warranty_status_summary`;
 
---
--- AUTO_INCREMENT de tabela `product_outputs`
---
-ALTER TABLE `product_outputs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
-
---
--- AUTO_INCREMENT de tabela `ready_machines`
---
-ALTER TABLE `ready_machines`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
-
---
--- AUTO_INCREMENT de tabela `system_logs`
---
-ALTER TABLE `system_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
-
---
--- AUTO_INCREMENT de tabela `system_settings`
---
-ALTER TABLE `system_settings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
-
---
--- AUTO_INCREMENT de tabela `users`
---
-ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+DROP VIEW IF EXISTS `vw_warranty_status_summary`;
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `vw_warranty_status_summary`  AS SELECT `p`.`id` AS `id`, `p`.`name` AS `product_name`, `p`.`warranty_start_date` AS `warranty_start_date`, `p`.`warranty_end_date` AS `warranty_end_date`, `wt`.`name` AS `template_name`, CASE WHEN `p`.`warranty_end_date` is null THEN 'Sem Garantia' WHEN `p`.`warranty_end_date` < curdate() THEN 'Expirada' WHEN to_days(`p`.`warranty_end_date`) - to_days(curdate()) <= 7 THEN 'Crítica (7 dias)' WHEN to_days(`p`.`warranty_end_date`) - to_days(curdate()) <= 30 THEN 'Atenção (30 dias)' ELSE 'Ativa' END AS `warranty_status`, to_days(`p`.`warranty_end_date`) - to_days(curdate()) AS `days_remaining`, CASE WHEN `p`.`warranty_end_date` is null THEN 0 WHEN `p`.`warranty_end_date` < curdate() THEN 4 WHEN to_days(`p`.`warranty_end_date`) - to_days(curdate()) <= 7 THEN 3 WHEN to_days(`p`.`warranty_end_date`) - to_days(curdate()) <= 30 THEN 2 ELSE 1 END AS `alert_level` FROM (`products` `p` left join `warranty_templates` `wt` on(`p`.`warranty_template_id` = `wt`.`id`)) WHERE `p`.`has_warranty` = 1 ;
 
 --
 -- Restrições para tabelas despejadas
@@ -559,7 +982,7 @@ ALTER TABLE `admin_logs`
 -- Restrições para tabelas `machine_inputs`
 --
 ALTER TABLE `machine_inputs`
-  ADD CONSTRAINT `machine_inputs_ibfk_1` FOREIGN KEY (`machine_id`) REFERENCES `ready_machines` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `machine_inputs_ibfk_1` FOREIGN KEY (`machine_id`) REFERENCES `ready_machines` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `machine_inputs_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 --
@@ -574,6 +997,14 @@ ALTER TABLE `machine_movements`
 --
 ALTER TABLE `machine_outputs`
   ADD CONSTRAINT `machine_outputs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Restrições para tabelas `products`
+--
+ALTER TABLE `products`
+  ADD CONSTRAINT `fk_product_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `products_ibfk_1` FOREIGN KEY (`warranty_template_id`) REFERENCES `warranty_templates` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `products_warranty_supplier_fk` FOREIGN KEY (`warranty_supplier_id`) REFERENCES `warranty_suppliers` (`id`) ON DELETE SET NULL;
 
 --
 -- Restrições para tabelas `product_inputs`
@@ -595,10 +1026,217 @@ ALTER TABLE `product_outputs`
   ADD CONSTRAINT `product_outputs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 --
+-- Restrições para tabelas `ready_machines`
+--
+ALTER TABLE `ready_machines`
+  ADD CONSTRAINT `fk_machine_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL;
+
+--
+-- Restrições para tabelas `remember_me_tokens`
+--
+ALTER TABLE `remember_me_tokens`
+  ADD CONSTRAINT `remember_me_tokens_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
 -- Restrições para tabelas `system_logs`
 --
 ALTER TABLE `system_logs`
   ADD CONSTRAINT `system_logs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Restrições para tabelas `warranty_claims`
+--
+ALTER TABLE `warranty_claims`
+  ADD CONSTRAINT `warranty_claims_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `warranty_claims_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Restrições para tabelas `warranty_history`
+--
+ALTER TABLE `warranty_history`
+  ADD CONSTRAINT `warranty_history_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `warranty_history_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+-- ========================================
+-- TRIGGERS AUTOMÁTICOS
+-- ========================================
+
+DELIMITER $$
+
+-- Trigger para registrar deletions de produtos
+DROP TRIGGER IF EXISTS `trg_product_delete`$$
+CREATE TRIGGER `trg_product_delete` BEFORE DELETE ON `products` 
+FOR EACH ROW BEGIN
+    INSERT INTO admin_logs (
+        action,
+        table_name,
+        record_id,
+        old_values,
+        new_values,
+        details,
+        timestamp
+    ) VALUES (
+        'DELETE',
+        'products',
+        OLD.id,
+        JSON_OBJECT(
+            'id', OLD.id,
+            'name', OLD.name,
+            'category', OLD.category,
+            'barcode', OLD.barcode,
+            'quantity', OLD.quantity,
+            'price', OLD.price,
+            'warranty_end_date', OLD.warranty_end_date
+        ),
+        NULL,
+        CONCAT('Produto deletado: ', OLD.name, ' (ID: ', OLD.id, ')'),
+        NOW()
+    );
+END$$
+
+DELIMITER ;
+
+-- ========================================
+-- VIEWS PARA RELATÓRIOS
+-- ========================================
+
+-- View: Garantias Ativas
+DROP VIEW IF EXISTS `vw_active_warranties`;
+CREATE VIEW `vw_active_warranties` AS
+SELECT 
+    p.id,
+    p.name,
+    p.category,
+    p.barcode,
+    p.warranty_provider,
+    p.warranty_start_date,
+    p.warranty_end_date,
+    p.warranty_period_value,
+    p.warranty_period_unit,
+    p.has_warranty,
+    DATEDIFF(p.warranty_end_date, CURDATE()) as days_remaining,
+    CalculateWarrantyStatus(p.warranty_end_date) as status
+FROM products p
+WHERE p.has_warranty = 1
+AND p.warranty_end_date >= CURDATE()
+ORDER BY p.warranty_end_date ASC;
+
+-- View: Alertas de Garantia (Vencendo em 30 dias)
+DROP VIEW IF EXISTS `vw_warranty_alerts`;
+CREATE VIEW `vw_warranty_alerts` AS
+SELECT 
+    p.id,
+    p.name,
+    p.category,
+    p.barcode,
+    p.warranty_provider,
+    p.warranty_end_date,
+    DATEDIFF(p.warranty_end_date, CURDATE()) as days_remaining,
+    CASE 
+        WHEN DATEDIFF(p.warranty_end_date, CURDATE()) < 0 THEN 'Expirada'
+        WHEN DATEDIFF(p.warranty_end_date, CURDATE()) <= 7 THEN 'Crítica'
+        WHEN DATEDIFF(p.warranty_end_date, CURDATE()) <= 30 THEN 'Aviso'
+        ELSE 'OK'
+    END as alert_level,
+    p.updated_at
+FROM products p
+WHERE p.has_warranty = 1
+AND p.warranty_end_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+ORDER BY p.warranty_end_date ASC;
+
+-- View: Produtos com Baixo Estoque
+DROP VIEW IF EXISTS `vw_low_stock`;
+CREATE VIEW `vw_low_stock` AS
+SELECT 
+    id,
+    name,
+    category,
+    barcode,
+    quantity,
+    min_quantity,
+    max_quantity,
+    price,
+    (quantity * price) as total_value,
+    CASE 
+        WHEN quantity < min_quantity THEN 'Crítico'
+        WHEN quantity < (min_quantity * 1.5) THEN 'Baixo'
+        ELSE 'Normal'
+    END as stock_status
+FROM products
+WHERE quantity <= min_quantity
+ORDER BY quantity ASC;
+
+-- View: Valor Total de Estoque
+DROP VIEW IF EXISTS `vw_inventory_value`;
+CREATE VIEW `vw_inventory_value` AS
+SELECT 
+    category,
+    COUNT(*) as total_items,
+    SUM(quantity) as total_quantity,
+    AVG(price) as average_price,
+    SUM(quantity * price) as total_value
+FROM products
+GROUP BY category
+ORDER BY total_value DESC;
+
+-- View: Relatório de Movimentação
+DROP VIEW IF EXISTS `vw_movement_report`;
+CREATE VIEW `vw_movement_report` AS
+SELECT 
+    p.id,
+    p.name,
+    p.category,
+    COUNT(pm.id) as total_movements,
+    MAX(pm.created_at) as last_movement,
+    SUM(CASE WHEN pm.movement_type = 'in' THEN pm.quantity ELSE 0 END) as total_in,
+    SUM(CASE WHEN pm.movement_type = 'out' THEN pm.quantity ELSE 0 END) as total_out,
+    p.quantity as current_quantity
+FROM products p
+LEFT JOIN product_movements pm ON p.id = pm.product_id
+GROUP BY p.id, p.name, p.category, p.quantity;
+
+-- View: Linha do Tempo de Garantia
+DROP VIEW IF EXISTS `vw_warranty_timeline`;
+CREATE VIEW `vw_warranty_timeline` AS
+SELECT 
+    wh.id,
+    wh.product_id,
+    p.name as product_name,
+    p.category,
+    wh.action_type,
+    wh.change_description,
+    wh.old_values,
+    wh.new_values,
+    u.username as updated_by,
+    wh.created_at
+FROM warranty_history wh
+LEFT JOIN products p ON wh.product_id = p.id
+LEFT JOIN users u ON wh.user_id = u.id
+ORDER BY wh.created_at DESC;
+
+-- ========================================
+-- ÍNDICES DE PERFORMANCE (ADICIONAIS)
+-- ========================================
+
+-- Índices para garantia
+ALTER TABLE `products` ADD INDEX `idx_warranty_end_date` (`warranty_end_date`);
+ALTER TABLE `products` ADD INDEX `idx_warranty_provider` (`warranty_provider`);
+ALTER TABLE `products` ADD INDEX `idx_category_status` (`category`, `status`);
+ALTER TABLE `products` ADD INDEX `idx_barcode_unique` (`barcode`);
+
+-- Índices para warranty_history
+ALTER TABLE `warranty_history` ADD INDEX `idx_created_at` (`created_at`);
+ALTER TABLE `warranty_history` ADD INDEX `idx_product_date` (`product_id`, `created_at`);
+ALTER TABLE `warranty_history` ADD INDEX `idx_action_type` (`action_type`);
+
+-- Índices para movimentação
+ALTER TABLE `product_movements` ADD INDEX `idx_movement_type_date` (`movement_type`, `created_at`);
+ALTER TABLE `product_movements` ADD INDEX `idx_user_date` (`user_id`, `created_at`);
+
+-- Índices para admin_logs
+ALTER TABLE `admin_logs` ADD INDEX `idx_action_timestamp` (`action`, `timestamp`);
+ALTER TABLE `admin_logs` ADD INDEX `idx_user_timestamp` (`user_id`, `timestamp`);
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

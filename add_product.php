@@ -30,6 +30,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $location = trim($_POST['location'] ?? '');
     $status = $_POST['status'] ?? 'available';
     $uploaded_image = trim($_POST['uploaded_image'] ?? '');
+
+    // Novos campos de garantia
+    $has_warranty = isset($_POST['has_warranty']) ? 1 : 0;
+    $warranty_provider = trim($_POST['warranty_provider'] ?? '');
+    $warranty_period_value = !empty($_POST['warranty_period_value']) ? intval($_POST['warranty_period_value']) : null;
+    $warranty_period_unit = trim($_POST['warranty_period_unit'] ?? '');
+    $warranty_start_date = !empty($_POST['warranty_start_date']) ? trim($_POST['warranty_start_date']) : null;
+    $warranty_end_date = !empty($_POST['warranty_end_date']) ? trim($_POST['warranty_end_date']) : null;
+    $invoice_number = trim($_POST['invoice_number'] ?? '');
+    $warranty_notes = trim($_POST['warranty_notes'] ?? '');
     
     if (empty($name)) {
         $error_message = 'O nome do produto é obrigatório.';
@@ -110,20 +120,38 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $stmt = $pdo->prepare("
                     INSERT INTO products (
                         name, description, image, category, manufacturer, model, 
-                        serial_number, barcode, qr_code, quantity, min_quantity, max_quantity, price, 
-                        location, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        serial_number, barcode, qr_code, quantity, min_quantity, max_quantity, 
+                        price, location, status, has_warranty, warranty_provider, 
+                        warranty_period_value, warranty_period_unit, warranty_start_date, 
+                        warranty_end_date, invoice_number, warranty_notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 
                 $stmt->execute([
                     $name, $description, $uploaded_image ?: null, $category, $manufacturer, $model,
                     $serial_number ?: null, $barcode ?: null, $qr_code ?: null,
-                    $quantity, $min_quantity, $max_quantity, $price ?: null, $location ?: null, $status
+                    $quantity, $min_quantity, $max_quantity, $price ?: null, $location ?: null, $status,
+                    $has_warranty, $has_warranty ? $warranty_provider : null, $has_warranty ? $warranty_period_value : null,
+                    $has_warranty ? $warranty_period_unit : null, $has_warranty ? $warranty_start_date : null,
+                    $has_warranty ? $warranty_end_date : null, $has_warranty ? $invoice_number : null, $has_warranty ? $warranty_notes : null
                 ]);
                 
                 $product_id = $pdo->lastInsertId();
 
                 logAdminActivity($_SESSION["user_id"], "CREATE", "products", $product_id);
+
+                // Registrar criação de garantia no histórico se o produto tem garantia
+                if ($has_warranty) {
+                    $warranty_data = [
+                        'warranty_provider' => $warranty_provider ?? '',
+                        'warranty_start_date' => $warranty_start_date ?? null,
+                        'warranty_end_date' => $warranty_end_date ?? null,
+                        'warranty_period_value' => $warranty_period_value ?? null,
+                        'warranty_period_unit' => $warranty_period_unit ?? null,
+                        'warranty_notes' => $warranty_notes ?? ''
+                    ];
+                    registerWarrantyHistory($pdo, $product_id, 'CREATE', [], $warranty_data, $_SESSION["user_id"]);
+                }
 
                 logProductMovement(
                     $product_id,
@@ -197,14 +225,9 @@ $code_from_scanner = $_GET['code'] ?? '';
                 Informações do Produto
             </div>
             <div class="card-body">
-                <form method="POST" action="" id="add-product-form" enctype="multipart/form-data">
+                <form method="POST" action="add_product.php" id="add-product-form" enctype="multipart/form-data">
                     <div class="row">
                         <div class="col-md-6">
-                            <h5 class="text-primary-custom mb-3">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Informações Básicas
-                            </h5>
-                            
                             <div class="mb-3">
                                 <label for="name" class="form-label form-label-custom">
                                     <i class="fas fa-tag me-1"></i>
@@ -286,13 +309,7 @@ $code_from_scanner = $_GET['code'] ?? '';
                                 <input type="hidden" id="uploaded_image" name="uploaded_image" value="<?php echo htmlspecialchars($uploaded_image ?? ''); ?>">
                             </div>
                         </div>
-                        
                         <div class="col-md-6">
-                            <h5 class="text-primary-custom mb-3">
-                                <i class="fas fa-qrcode me-2"></i>
-                                Códigos e Identificação
-                            </h5>
-                            
                             <div class="mb-3">
                                 <label for="serial_number" class="form-label form-label-custom">
                                     <i class="fas fa-hashtag me-1"></i>
@@ -389,7 +406,75 @@ $code_from_scanner = $_GET['code'] ?? '';
                             </div>
                         </div>
                     </div>
-                    
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="has_warranty" name="has_warranty" value="1">
+                                    <label class="form-check-label" for="has_warranty">
+                                        <strong>Produto possui garantia?</strong>
+                                    </label>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-info" id="openWarrantyModalBtn" style="display: none;" data-bs-toggle="modal" data-bs-target="#warrantyModalProduct">
+                                    <i class="fas fa-shield-alt me-1"></i> Editar Garantia
+                                </button>
+                            </div>
+
+                            <div id="warranty-details" style="display: none;">
+                                <div class="alert alert-light border border-info p-3 mb-3">
+                                    <i class="fas fa-info-circle me-2 text-info"></i>
+                                    <small><strong>Dica:</strong> Clique em "Editar Garantia" para preenchimento simplificado e otimizado dos dados.</small>
+                                </div>
+                                <div class="p-3 border rounded bg-light mb-4">
+                                    <!-- CAMPOS OCULTOS - Sincronizados do modal -->
+                                    <input type="hidden" id="warranty_provider" name="warranty_provider">
+                                    <input type="hidden" id="invoice_number" name="invoice_number">
+                                    <input type="hidden" id="warranty_start_date" name="warranty_start_date">
+                                    <input type="hidden" id="warranty_period_value" name="warranty_period_value">
+                                    <input type="hidden" id="warranty_period_unit" name="warranty_period_unit">
+                                    <input type="hidden" id="warranty_end_date" name="warranty_end_date">
+                                    <input type="hidden" id="warranty_notes" name="warranty_notes">
+
+                                    <!-- RESUMO DE GARANTIA (VISUALIZAÇÃO) -->
+                                    <div id="warranty-summary" class="d-none">
+                                        <div class="row">
+                                            <div class="col-md-6 mb-2">
+                                                <small class="text-muted"><i class="fas fa-store me-1"></i>Fornecedor:</small>
+                                                <div class="fw-bold" id="summary-provider">-</div>
+                                            </div>
+                                            <div class="col-md-6 mb-2">
+                                                <small class="text-muted"><i class="fas fa-file-invoice me-1"></i>Nota Fiscal:</small>
+                                                <div class="fw-bold" id="summary-invoice">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-4 mb-2">
+                                                <small class="text-muted"><i class="fas fa-calendar-alt me-1"></i>Início:</small>
+                                                <div class="fw-bold" id="summary-start">-</div>
+                                            </div>
+                                            <div class="col-md-4 mb-2">
+                                                <small class="text-muted"><i class="fas fa-hourglass-half me-1"></i>Duração:</small>
+                                                <div class="fw-bold" id="summary-period">-</div>
+                                            </div>
+                                            <div class="col-md-4 mb-2">
+                                                <small class="text-muted"><i class="fas fa-calendar-check me-1"></i>Término:</small>
+                                                <div class="fw-bold" id="summary-end">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 p-2 bg-white rounded border border-left-info">
+                                            <small class="text-muted d-block mb-1"><i class="fas fa-sticky-note me-1"></i>Anotações:</small>
+                                            <div id="summary-notes" class="text-break" style="font-size: 0.9em;"></div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="clearWarrantyData()">
+                                                <i class="fas fa-trash me-1"></i> Limpar Dados
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="row">
                         <div class="col-12">
                             <hr class="my-4">
@@ -419,43 +504,166 @@ $code_from_scanner = $_GET['code'] ?? '';
     </div>
 </div>
 
-<div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="scannerModalLabel"><i class="fas fa-barcode me-2"></i>Scanner de Código</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-0">
-                <iframe id="scannerIframe" src="" style="width: 100%; height: 450px; border: none;"></iframe>
-            </div>
-        </div>
-    </div>
-</div>
-
-
 <?php include 'includes/footer.php'; ?>
+<?php $GLOBALS['is_inside_product_form'] = true; ?>
+<?php include 'includes/warranty_modal_inline.php'; ?>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const scannerModal = new bootstrap.Modal(document.getElementById('scannerModal'));
-    const scannerIframe = document.getElementById('scannerIframe');
-    const scannerModalElement = document.getElementById('scannerModal');
+    // REFERÊNCIAS
+    const hasWarrantyCheckbox = document.getElementById('has_warranty');
+    const warrantyDetailsDiv = document.getElementById('warranty-details');
+    const openWarrantyModalBtn = document.getElementById('openWarrantyModalBtn');
+    const warrantySummary = document.getElementById('warranty-summary');
 
-    scannerModalElement.addEventListener('show.bs.modal', function (event) {
-        const button = event.relatedTarget;
-        const targetInputId = button.getAttribute('data-target-input');
-        scannerIframe.src = `scanner_modal.php?target=${targetInputId}`;
+    // ========================================
+    // MOSTRAR/OCULTAR SEÇÃO DE GARANTIA
+    // ========================================
+    hasWarrantyCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            warrantyDetailsDiv.style.display = 'block';
+            openWarrantyModalBtn.style.display = 'inline-block';
+            // Se houver dados salvos, mostra o resumo
+            updateWarrantySummary();
+        } else {
+            warrantyDetailsDiv.style.display = 'none';
+            openWarrantyModalBtn.style.display = 'none';
+            warrantySummary.classList.add('d-none');
+        }
     });
 
-    scannerModalElement.addEventListener('hidden.bs.modal', function () {
-        scannerIframe.src = '';
-    });
+    // ========================================
+    // ATUALIZAR RESUMO DA GARANTIA
+    // ========================================
+    window.updateWarrantySummary = function() {
+        const provider = document.getElementById('warranty_provider').value;
+        const invoice = document.getElementById('invoice_number').value;
+        const startDate = document.getElementById('warranty_start_date').value;
+        const periodValue = document.getElementById('warranty_period_value').value;
+        const periodUnit = document.getElementById('warranty_period_unit').value;
+        const endDate = document.getElementById('warranty_end_date').value;
+        const notes = document.getElementById('warranty_notes').value;
 
-    window.setScannedCode = function(code, targetId) {
-        document.getElementById(targetId).value = code;
-        scannerModal.hide();
+        if (provider || invoice || startDate || periodValue || endDate) {
+            document.getElementById('summary-provider').textContent = provider || '-';
+            document.getElementById('summary-invoice').textContent = invoice || '-';
+            document.getElementById('summary-start').textContent = startDate ? new Date(startDate).toLocaleDateString('pt-BR') : '-';
+            document.getElementById('summary-period').textContent = periodValue && periodUnit ? `${periodValue} ${periodUnit}` : '-';
+            document.getElementById('summary-end').textContent = endDate ? new Date(endDate).toLocaleDateString('pt-BR') : '-';
+            document.getElementById('summary-notes').textContent = notes || '(Sem anotações)';
+            
+            warrantySummary.classList.remove('d-none');
+        } else {
+            warrantySummary.classList.add('d-none');
+        }
     };
-    
+
+    // ========================================
+    // LIMPAR DADOS DE GARANTIA
+    // ========================================
+    window.clearWarrantyData = function() {
+        if (!confirm('Deseja limpar todos os dados de garantia?')) return;
+        
+        document.getElementById('warranty_provider').value = '';
+        document.getElementById('invoice_number').value = '';
+        document.getElementById('warranty_start_date').value = '';
+        document.getElementById('warranty_period_value').value = '';
+        document.getElementById('warranty_period_unit').value = 'months';
+        document.getElementById('warranty_end_date').value = '';
+        document.getElementById('warranty_notes').value = '';
+        
+        // Resetar também no modal
+        document.getElementById('product_warranty_provider').value = '';
+        document.getElementById('product_invoice_number').value = '';
+        document.getElementById('product_warranty_start_date').value = '';
+        document.getElementById('product_warranty_period_value').value = '';
+        document.getElementById('product_warranty_period_unit').value = 'months';
+        document.getElementById('product_warranty_end_date').value = '';
+        document.getElementById('product_warranty_notes').value = '';
+        
+        warrantySummary.classList.add('d-none');
+        showAlert('Dados de garantia limpos!', 'info');
+    };
+
+    // ========================================
+    // MONITORAR MUDANÇAS NO MODAL
+    // ========================================
+    const warrantyModal = document.getElementById('warrantyModalProduct');
+    if (warrantyModal) {
+        warrantyModal.addEventListener('hidden.bs.modal', function() {
+            // Atualiza o resumo quando o modal é fechado
+            updateWarrantySummary();
+        });
+    }
+
+    // Sincronizar dados quando o formulário é enviado
+    const form = document.getElementById('add-product-form');
+    if (form) {
+        form.addEventListener('submit', function() {
+            // Os dados já estão nos campos hidden, apenas certifica-se
+            const fields = ['warranty_provider', 'invoice_number', 'warranty_start_date', 'warranty_period_value', 'warranty_period_unit', 'warranty_end_date', 'warranty_notes'];
+            
+            if (hasWarrantyCheckbox.checked) {
+                fields.forEach(field => {
+                    const modalField = document.getElementById('product_' + field);
+                    const formField = document.getElementById(field);
+                    if (modalField && formField) {
+                        formField.value = modalField.value;
+                    }
+                });
+            }
+        });
+    }
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- LÓGICA DA GARANTIA ---
+    const hasWarrantyCheckbox = document.getElementById('has_warranty');
+    const warrantyDetailsDiv = document.getElementById('warranty-details');
+    const warrantyStartDateInput = document.getElementById('warranty_start_date');
+    const warrantyPeriodValueInput = document.getElementById('warranty_period_value');
+    const warrantyPeriodUnitInput = document.getElementById('warranty_period_unit');
+    const warrantyEndDateInput = document.getElementById('warranty_end_date');
+
+    // Mostra/esconde os detalhes da garantia
+    hasWarrantyCheckbox.addEventListener('change', function() {
+        warrantyDetailsDiv.style.display = this.checked ? 'block' : 'none';
+    });
+
+    // Função para calcular a data final da garantia
+    function calculateEndDate() {
+        const startDate = warrantyStartDateInput.value;
+        const periodValue = parseInt(warrantyPeriodValueInput.value);
+        const periodUnit = warrantyPeriodUnitInput.value;
+
+        if (startDate && periodValue > 0) {
+            // Usar T00:00:00 para evitar problemas de fuso horário com new Date()
+            const date = new Date(startDate + 'T00:00:00'); 
+            
+            if (periodUnit === 'days') {
+                date.setDate(date.getDate() + periodValue);
+            } else if (periodUnit === 'months') {
+                date.setMonth(date.getMonth() + periodValue);
+            } else if (periodUnit === 'years') {
+                date.setFullYear(date.getFullYear() + periodValue);
+            }
+
+            // Formata a data para o padrão YYYY-MM-DD, que é o que o input[type=date] espera
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            
+            warrantyEndDateInput.value = `${year}-${month}-${day}`;
+        }
+    }
+
+    // Adiciona listeners para recalcular a data final sempre que um campo relevante mudar
+    warrantyStartDateInput.addEventListener('change', calculateEndDate);
+    warrantyPeriodValueInput.addEventListener('input', calculateEndDate);
+    warrantyPeriodUnitInput.addEventListener('change', calculateEndDate);
+
+document.addEventListener('DOMContentLoaded', function() {
     // ... (restante do seu JavaScript original)
     
     const uploadArea = document.getElementById('upload-area');
@@ -570,6 +778,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitBtn.disabled = false;
             }, 5000);
         });
+    }
+
+    // --- LÓGICA DA GARANTIA ---
+    const hasWarrantyCheckbox = document.getElementById('has_warranty');
+    const warrantyDetailsDiv = document.getElementById('warranty-details');
+    const warrantyStartDateInput = document.getElementById('warranty_start_date');
+    const warrantyPeriodValueInput = document.getElementById('warranty_period_value');
+    const warrantyPeriodUnitInput = document.getElementById('warranty_period_unit');
+    const warrantyEndDateInput = document.getElementById('warranty_end_date');
+
+    // Mostra/esconde os detalhes da garantia
+    hasWarrantyCheckbox.addEventListener('change', function() {
+        warrantyDetailsDiv.style.display = this.checked ? 'block' : 'none';
+    });
+
+    // Função para calcular a data final da garantia
+    function calculateEndDate() {
+        const startDate = warrantyStartDateInput.value;
+        const periodValue = parseInt(warrantyPeriodValueInput.value);
+        const periodUnit = warrantyPeriodUnitInput.value;
+
+        if (startDate && periodValue > 0) {
+            const date = new Date(startDate + 'T00:00:00'); // Adiciona T00:00:00 para evitar problemas de fuso horário
+            
+            if (periodUnit === 'days') {
+                date.setDate(date.getDate() + periodValue);
+            } else if (periodUnit === 'months') {
+                date.setMonth(date.getMonth() + periodValue);
+            } else if (periodUnit === 'years') {
+                date.setFullYear(date.getFullYear() + periodValue);
+            }
+
+            // Formata a data para YYYY-MM-DD
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            
+            warrantyEndDateInput.value = `${year}-${month}-${day}`;
+        }
+    }
+
+    // Adiciona listeners para recalcular a data final
+    if(warrantyStartDateInput) {
+        warrantyStartDateInput.addEventListener('change', calculateEndDate);
+        warrantyPeriodValueInput.addEventListener('input', calculateEndDate);
+        warrantyPeriodUnitInput.addEventListener('change', calculateEndDate);
     }
 });
 

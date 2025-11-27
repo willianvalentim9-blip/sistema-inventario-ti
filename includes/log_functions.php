@@ -1,7 +1,7 @@
 <?php
 /**
  * Função para registrar logs no sistema
- *
+ * 
  * @param string $action Ação realizada
  * @param string $details Detalhes da ação
  * @param int|null $user_id ID do usuário (opcional)
@@ -10,12 +10,12 @@
 function logSystemAction($action, $details = null, $user_id = null) {
     try {
         $pdo = getConnection();
-
+        
         // Se user_id não foi fornecido, tenta pegar da sessão
         if ($user_id === null && isset($_SESSION['user_id'])) {
             $user_id = $_SESSION['user_id'];
         }
-
+        
         // Pega o IP do usuário
         $ip_address = $_SERVER['REMOTE_ADDR'] ?? null;
         if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
@@ -23,10 +23,10 @@ function logSystemAction($action, $details = null, $user_id = null) {
         } elseif (isset($_SERVER['HTTP_X_REAL_IP'])) {
             $ip_address = $_SERVER['HTTP_X_REAL_IP'];
         }
-
+        
         $stmt = $pdo->prepare("INSERT INTO system_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)");
         return $stmt->execute([$user_id, $action, $details, $ip_address]);
-
+        
     } catch (PDOException $e) {
         error_log("Erro ao registrar log: " . $e->getMessage());
         return false;

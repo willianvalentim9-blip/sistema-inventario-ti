@@ -22,13 +22,18 @@ $filesToLoad = [
     'barcode-lib/src/Barcode.php',
     'barcode-lib/src/BarcodeBar.php',
     'barcode-lib/src/BarcodeGenerator.php',
+    'barcode-lib/src/Helpers/ColorHelper.php',
+    'barcode-lib/src/Helpers/StringHelpers.php',
+    'barcode-lib/src/Helpers/BinarySequenceConverter.php',
     
     // Renderizadores
     'barcode-lib/src/Renderers/RendererInterface.php',
     'barcode-lib/src/Renderers/PngRenderer.php',
+    'barcode-lib/src/Renderers/SvgRenderer.php',
 
-    // Gerador principal que será usado
+    // Geradores
     'barcode-lib/src/BarcodeGeneratorPNG.php',
+    'barcode-lib/src/BarcodeGeneratorSVG.php',
 
     // Interface e tipos base
     'barcode-lib/src/Types/TypeInterface.php',
@@ -57,19 +62,23 @@ foreach ($filesToLoad as $file) {
         $errorMessage = "ERRO FATAL: Arquivo de biblioteca de codigo de barras nao encontrado: " . htmlspecialchars($fullPath);
         error_log($errorMessage);
         
-        // Cria uma imagem de erro para feedback visual imediato no navegador
+        // Retorna erro em SVG (funciona sem GD)
         if (!headers_sent()) {
-            header('Content-Type: image/png');
+            header('Content-Type: image/svg+xml; charset=utf-8');
         }
-        $image = imagecreate(800, 60);
-        if ($image) {
-            imagecolorallocate($image, 255, 235, 238); // Fundo rosa
-            $textColor = imagecolorallocate($image, 185, 28, 28); // Texto vermelho
-            imagestring($image, 3, 10, 5, "ERRO NO SERVIDOR: Arquivo de biblioteca ausente.", $textColor);
-            imagestring($image, 3, 10, 25, "Caminho: " . basename(dirname($fullPath)) . "/" . basename($fullPath), $textColor);
-            imagepng($image);
-            imagedestroy($image);
-        }
+        $fileName = basename(dirname($fullPath)) . "/" . basename($fullPath);
+        echo <<<SVG
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="60" viewBox="0 0 800 60">
+    <rect width="100%" height="100%" fill="#ffe6e6"/>
+    <text x="10" y="20" font-family="Arial" font-size="14" fill="#c41c1c">
+        ERRO NO SERVIDOR: Arquivo de biblioteca ausente.
+    </text>
+    <text x="10" y="45" font-family="Arial" font-size="12" fill="#c41c1c">
+        $fileName
+    </text>
+</svg>
+SVG;
         exit;
     }
 }

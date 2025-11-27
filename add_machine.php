@@ -66,6 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $location = trim($_POST['location'] ?? '');
     $notes = trim($_POST['notes'] ?? '');
     $uploaded_image = trim($_POST['uploaded_image'] ?? '');
+    $has_warranty = isset($_POST['machine_has_warranty']) ? 1 : 0;
+    $warranty_provider = trim($_POST['machine_warranty_provider'] ?? '');
+    $warranty_period_value = !empty($_POST['machine_warranty_period_value']) ? intval($_POST['machine_warranty_period_value']) : null;
+    $warranty_period_unit = trim($_POST['machine_warranty_period_unit'] ?? '');
     
     // Validação básica
     if (empty($name)) {
@@ -76,6 +80,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error_message = 'O preço de venda não pode ser negativo.';
     } elseif ($cost_price < 0) {
         $error_message = 'O preço de custo não pode ser negativo.';
+    } elseif ($has_warranty && empty($warranty_provider)) {
+        $error_message = 'Fornecedor de Garantia é obrigatório quando a máquina tem garantia.';
+    } elseif ($has_warranty && empty($warranty_period_value)) {
+        $error_message = 'Duração da Garantia é obrigatória quando a máquina tem garantia.';
     } else {
         try {
             $pdo = getConnection();
@@ -104,8 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         name, description, image, specifications, processor, memory, storage, 
                         graphics, motherboard, power_supply, case_type, serial_number, 
                         barcode, qr_code, quantity, sale_price, cost_price, windows_10_compatible, 
-                        windows_11_compatible, status, location, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        windows_11_compatible, status, location, notes, has_warranty, warranty_provider, 
+                        warranty_period_value, warranty_period_unit
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 
                 $stmt->execute([
@@ -113,7 +122,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $memory, $storage, $graphics, $motherboard, $power_supply, $case_type,
                     $serial_number ?: null, $barcode ?: null, $qr_code ?: null, $quantity,
                     $sale_price ?: null, $cost_price ?: null, $windows_10_compatible,
-                    $windows_11_compatible, $status, $location ?: null, $notes ?: null
+                    $windows_11_compatible, $status, $location ?: null, $notes ?: null,
+                    $has_warranty, $has_warranty ? $warranty_provider : null, 
+                    $has_warranty ? $warranty_period_value : null, $has_warranty ? $warranty_period_unit : null
                 ]);
                 
                 $machine_id = $pdo->lastInsertId();
@@ -249,8 +260,49 @@ $code_from_scanner = $_GET['code'] ?? '';
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="notes" class="form-label form-label-custom">Observações</label>
-                        <textarea class="form-control form-control-custom" id="notes" name="notes" rows="3" placeholder="Observações adicionais..."><?php echo htmlspecialchars($notes); ?></textarea>
+                        <label for="notes" class="form-label form-label-custom">Observacoes</label>
+                        <textarea class="form-control form-control-custom" id="notes" name="notes" rows="3" placeholder="Observacoes adicionais..."></textarea>
+                    </div>
+                    
+                    <!-- CAMPOS DE GARANTIA -->
+                    <h5 class="text-primary-custom mb-3 mt-4"><i class="fas fa-shield-alt me-2"></i>Garantia</h5>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="machine_has_warranty" name="machine_has_warranty" value="1">
+                        <label class="form-check-label" for="machine_has_warranty"><i class="fas fa-check me-1"></i>Maquina com Garantia</label>
+                    </div>
+                    <div id="warranty-fields-add" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="machine_warranty_provider" class="form-label form-label-custom">
+                                    <i class="fas fa-building me-1"></i>Fornecedor
+                                </label>
+                                <input type="text" class="form-control form-control-custom" 
+                                       id="machine_warranty_provider" 
+                                       name="machine_warranty_provider"
+                                       placeholder="Ex: Samsung, LG, Autorizado">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="machine_warranty_period_value" class="form-label form-label-custom">
+                                    <i class="fas fa-hourglass-half me-1"></i>Duracao
+                                </label>
+                                <input type="number" class="form-control form-control-custom" 
+                                       id="machine_warranty_period_value" 
+                                       name="machine_warranty_period_value"
+                                       min="1" placeholder="Ex: 12">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="machine_warranty_period_unit" class="form-label form-label-custom">
+                                    <i class="fas fa-calendar-alt me-1"></i>Unidade
+                                </label>
+                                <select class="form-select form-control-custom" 
+                                        id="machine_warranty_period_unit"
+                                        name="machine_warranty_period_unit">
+                                    <option value="days">Dias</option>
+                                    <option value="months" selected>Meses</option>
+                                    <option value="years">Anos</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -271,6 +323,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadPreview = document.getElementById('upload-preview');
     const previewImage = document.getElementById('preview-image');
     const uploadedImageInput = document.getElementById('uploaded_image');
+    const hasWarrantyCheckbox = document.getElementById('machine_has_warranty');
+    const warrantyFieldsRow = document.getElementById('warranty-fields-add');
+    
+    // Warranty checkbox handler
+    if (hasWarrantyCheckbox) {
+        hasWarrantyCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                warrantyFieldsRow.style.display = '';
+            } else {
+                warrantyFieldsRow.style.display = 'none';
+            }
+        });
+    }
     
     uploadArea.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', function() { if (this.files.length > 0) handleFileUpload(this.files[0]); });

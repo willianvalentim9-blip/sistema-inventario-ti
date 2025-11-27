@@ -7,7 +7,7 @@ ob_start();
 // ========================================
 // CONFIGURAÇÕES DO BANCO DE DADOS
 // ========================================
-define("DB_HOST", "db");
+define("DB_HOST", "localhost");
 define("DB_NAME", "it_inventory");
 define("DB_USER", "admin");
 define("DB_PASS", "@#8520@#");
@@ -101,6 +101,14 @@ function requireAdmin() {
 }
 
 // ========================================
+// CARREGAMENTO DE FUNÇÕES AUXILIARES
+// ========================================
+// Incluir funções de garantia se o arquivo existir
+if (file_exists(__DIR__ . '/includes/warranty_functions.php')) {
+    require_once __DIR__ . '/includes/warranty_functions.php';
+}
+
+// ========================================
 // FUNÇÃO CENTRAL DE LOGS
 // ========================================
 
@@ -180,3 +188,4 @@ if (!empty($output)) {
     // Apenas loga, mas não exibe para não quebrar respostas JSON
     error_log("Saída inesperada em config.php: " . $output);
 }
+?>

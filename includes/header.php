@@ -66,6 +66,12 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         <span class="sidebar-text">Máquinas</span>
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="warranties.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warranties.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Garantias">
+                        <i class="fas fa-shield-alt fa-fw"></i>
+                        <span class="sidebar-text">Garantias</span>
+                    </a>
+                </li>
                 
                 <hr class="sidebar-divider my-2">
 

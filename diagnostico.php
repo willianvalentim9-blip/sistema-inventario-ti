@@ -58,30 +58,52 @@ $all_ok = true;
                         $php_version_ok = version_compare(PHP_VERSION, '7.4', '>=');
                         if (!check('Versão do PHP', $php_version_ok, 'Versão ' . PHP_VERSION . ' é compatível.', 'Sua versão do PHP é ' . PHP_VERSION . '. É necessário PHP 7.4 ou superior.')) $all_ok = false;
 
-                        // 2. Extensão GD
+                        // 2. Extensão GD (agora opcional - usamos SVG)
                         $gd_ok = extension_loaded('gd') && function_exists('imagecreate');
-                        if (!check('Extensão GD', $gd_ok, 'A extensão GD está instalada e ativa.', '<b>A extensão GD não está ativa!</b> Para corrigir, abra seu arquivo <code>php.ini</code>, procure a linha <code>;extension=gd</code> e remova o <code>;</code> do início. Depois, <b>reinicie o seu servidor Apache</b>.')) $all_ok = false;
+                        if (!check('Extensão GD', $gd_ok, 'A extensão GD está instalada e ativa (opcional).', '<b>A extensão GD não está ativa.</b> Sem GD, o sistema ainda funciona usando SVG. Para instalá-la, abra seu arquivo <code>php.ini</code>, procure a linha <code>;extension=gd</code> e remova o <code>;</code> do início. Depois, <b>reinicie o seu servidor Apache</b>.')) {
+                            // GD é opcional agora, não afeta all_ok
+                        }
 
                         // 3. Carregador da Biblioteca
                         $loader_path = __DIR__ . '/barcode-loader.php';
                         $loader_ok = file_exists($loader_path);
                         if (!check('Carregador da Biblioteca', $loader_ok, 'O arquivo barcode-loader.php foi encontrado.', '<b>Arquivo não encontrado:</b> <code>' . htmlspecialchars($loader_path) . '</code>. Certifique-se de que o arquivo <code>barcode-loader.php</code> que criamos anteriormente existe na pasta <code>Sistema/</code>.')) $all_ok = false;
                         
-                        // 4. Teste de Geração de Imagem
+                        // 4. Teste de Geração de Imagem SVG (não requer GD)
                         $image_test_ok = false;
                         $error_message = '';
-                        if ($gd_ok && $loader_ok) {
+                        if ($loader_ok) {
                             try {
-                                // **CORREÇÃO**: Usa o carregador centralizado
+                                // Usa o carregador centralizado
                                 require_once $loader_path;
 
-                                $generator = new \Picqer\Barcode\BarcodeGeneratorPNG();
-                                $barcodeImage = $generator->getBarcode('12345', 'C128', 2, 30);
-                                
-                                if ($barcodeImage && strlen($barcodeImage) > 100) {
-                                    $image_test_ok = true;
-                                } else {
-                                    $error_message = 'A função de geração retornou dados inválidos.';
+                                // Tenta SVG primeiro (não requer GD)
+                                try {
+                                    $generator = new \Picqer\Barcode\BarcodeGeneratorSVG();
+                                    $barcodeImage = $generator->getBarcode('12345', 'C128', 2, 30);
+                                    
+                                    if ($barcodeImage && strlen($barcodeImage) > 500 && strpos($barcodeImage, '<svg') !== false) {
+                                        $image_test_ok = true;
+                                        $test_message = 'Sistema usando SVG (sem dependência de GD)';
+                                    } else {
+                                        $error_message = 'Gerador SVG retornou dados inválidos.';
+                                    }
+                                } catch (Throwable $e) {
+                                    // Se SVG falhar, tenta PNG (com GD)
+                                    try {
+                                        if (!$gd_ok) {
+                                            throw new Exception('GD não está disponível para PNG');
+                                        }
+                                        $generator = new \Picqer\Barcode\BarcodeGeneratorPNG();
+                                        $barcodeImage = $generator->getBarcode('12345', 'C128', 2, 30);
+                                        
+                                        if ($barcodeImage && strlen($barcodeImage) > 100) {
+                                            $image_test_ok = true;
+                                            $test_message = 'Sistema usando PNG com GD';
+                                        }
+                                    } catch (Throwable $e2) {
+                                        $error_message = 'SVG falhou: ' . $e->getMessage() . ' | PNG falhou: ' . $e2->getMessage();
+                                    }
                                 }
                             } catch (Throwable $e) {
                                 $error_message = 'Erro ao tentar gerar o código de barras: ' . $e->getMessage();
@@ -89,7 +111,7 @@ $all_ok = true;
                         } else {
                             $error_message = 'Teste não executado devido a falhas anteriores.';
                         }
-                        if (!check('Teste de Geração', $image_test_ok, 'A biblioteca conseguiu gerar uma imagem de código de barras com sucesso.', '<b>Falha ao gerar a imagem.</b> Erro: ' . htmlspecialchars($error_message))) $all_ok = false;
+                        if (!check('Teste de Geração', $image_test_ok, $test_message ?? 'A biblioteca conseguiu gerar uma imagem de código de barras com sucesso.', '<b>Falha ao gerar a imagem.</b> Erro: ' . htmlspecialchars($error_message))) $all_ok = false;
                         ?>
                     </tbody>
                 </table>
