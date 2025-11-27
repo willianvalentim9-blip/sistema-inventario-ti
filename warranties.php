@@ -12,18 +12,29 @@ $pdo = getConnection();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // Validação comum para templates
+    // Validação comum para templates - CORRIGIDO: Validação mais rigorosa
     $warranty_provider = trim($_POST['warranty_provider'] ?? '');
     $warranty_period_value = intval($_POST['warranty_period_value'] ?? 0);
     $warranty_period_unit = $_POST['warranty_period_unit'] ?? 'months';
     $template_name = trim($_POST['template_name'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $warranty_notes = trim($_POST['warranty_notes'] ?? '');
+    
+    // NOVO: Validar limite máximo de período (prevenir valores absurdos)
+    if ($warranty_period_value > 10000) {
+        $warranty_period_value = 10000;
+    }
+    
+    // NOVO: Validar que unidade é válida
+    if (!in_array($warranty_period_unit, ['days', 'months', 'years'])) {
+        $warranty_period_unit = 'months';
+    }
 
     // ===== CRIAR NOVO TEMPLATE =====
     if ($action === 'create_template') {
-        if (empty($template_name) || $warranty_period_value <= 0) {
-            $_SESSION['flash_message'] = '✗ Preencha todos os campos obrigatórios';
+        // CORRIGIDO: Validação mais rigorosa incluindo período máximo
+        if (empty($template_name) || $warranty_period_value <= 0 || $warranty_period_value > 10000) {
+            $_SESSION['flash_message'] = '✗ Preencha todos os campos obrigatórios (período deve estar entre 1 e 10000)';
             $_SESSION['flash_type'] = 'danger';
         } else {
             try {
@@ -61,8 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ===== ATUALIZAR TEMPLATE =====
     if ($action === 'update_template') {
         $template_id = intval($_POST['template_id'] ?? 0);
-        if ($template_id <= 0 || empty($template_name) || $warranty_period_value <= 0) {
-            $_SESSION['flash_message'] = '✗ Dados inválidos';
+        // CORRIGIDO: Validação mais rigorosa incluindo período máximo
+        if ($template_id <= 0 || empty($template_name) || $warranty_period_value <= 0 || $warranty_period_value > 10000) {
+            $_SESSION['flash_message'] = '✗ Dados inválidos (período deve estar entre 1 e 10000)';
             $_SESSION['flash_type'] = 'danger';
         } else {
             try {
@@ -148,16 +160,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception('Template não encontrado');
             }
 
-            // Verificar se template está sendo usado
+            // Verificar se template está sendo usado - CORRIGIDO: Verificar AMBAS as tabelas
+            // Produtos
             $stmt_check = $pdo->prepare("
                 SELECT COUNT(*) as count FROM products 
                 WHERE warranty_template_id = ?
             ");
             $stmt_check->execute([$template_id]);
-            $usage = $stmt_check->fetch();
+            $usage_products = $stmt_check->fetch()['count'];
+            
+            // Máquinas (ready_machines)
+            $stmt_check = $pdo->prepare("
+                SELECT COUNT(*) as count FROM ready_machines 
+                WHERE warranty_template_id = ?
+            ");
+            $stmt_check->execute([$template_id]);
+            $usage_machines = $stmt_check->fetch()['count'];
+            
+            $total_usage = $usage_products + $usage_machines;
 
-            if ($usage['count'] > 0) {
-                $_SESSION['flash_message'] = '✗ Não é possível excluir! Este template está vinculado a ' . $usage['count'] . ' produto(s).';
+            if ($total_usage > 0) {
+                $msg = '✗ Não é possível excluir! Este template está vinculado a ';
+                if ($usage_products > 0) $msg .= $usage_products . ' produto(s)';
+                if ($usage_machines > 0) $msg .= ($usage_products > 0 ? ' e ' : '') . $usage_machines . ' máquina(s)';
+                $_SESSION['flash_message'] = $msg . '.';
                 $_SESSION['flash_type'] = 'warning';
                 header('Location: warranties.php?tab=templates');
                 exit;
@@ -401,6 +427,41 @@ if (!empty($_GET['action']) && $_GET['action'] === 'get_supplier' && !empty($_GE
     exit;
 }
 
+// Verificar se CNPJ já existe (AJAX)
+if (!empty($_GET['action']) && $_GET['action'] === 'check_cnpj') {
+    header('Content-Type: application/json');
+    $cnpj = trim($_GET['cnpj'] ?? '');
+    $exclude_id = intval($_GET['exclude_id'] ?? 0); // Para UPDATE, excluir o ID atual
+    
+    try {
+        if (empty($cnpj)) {
+            echo json_encode(['exists' => false, 'message' => 'CNPJ vazio']);
+            exit;
+        }
+        
+        if ($exclude_id > 0) {
+            // UPDATE: Verificar se existe outro fornecedor com este CNPJ
+            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM warranty_suppliers WHERE cnpj = ? AND id != ?");
+            $stmt->execute([$cnpj, $exclude_id]);
+        } else {
+            // CREATE: Verificar se existe qualquer fornecedor com este CNPJ
+            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM warranty_suppliers WHERE cnpj = ?");
+            $stmt->execute([$cnpj]);
+        }
+        
+        $result = $stmt->fetch();
+        $exists = $result['count'] > 0;
+        
+        echo json_encode([
+            'exists' => $exists,
+            'message' => $exists ? 'CNPJ já cadastrado' : 'CNPJ disponível'
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode(['exists' => false, 'message' => 'Erro ao verificar CNPJ']);
+    }
+    exit;
+}
+
 // =====================================================
 // OBTER DADOS PARA EXIBIÇÃO
 // =====================================================
@@ -466,9 +527,10 @@ try {
     $total_products = $count_stmt->fetch()['total'];
     $total_pages = ceil($total_products / $per_page);
     
-    $sql = "SELECT * FROM products $where_clause ORDER BY warranty_end_date ASC LIMIT $per_page OFFSET $offset";
+    // CORRIGIDO: Usar prepared statement para LIMIT e OFFSET (prevenir SQL Injection)
+    $sql = "SELECT * FROM products $where_clause ORDER BY warranty_end_date ASC LIMIT ? OFFSET ?";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    $stmt->execute(array_merge($params, [$per_page, $offset]));
     $products = $stmt->fetchAll();
     
     $categories_stmt = $pdo->query("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category");
@@ -478,6 +540,48 @@ try {
 } catch (PDOException $e) {
     $error_message = 'Erro ao carregar garantias: ' . $e->getMessage();
     $products = []; $categories = []; $total_products = 0; $total_pages = 0;
+}
+
+// DADOS PARA ABA MÁQUINAS
+$search_machines = trim($_GET['search_machines'] ?? '');
+$machines_status_filter = $_GET['machines_status'] ?? '';
+$machines_page = max(1, intval($_GET['machines_page'] ?? 1));
+$machines_per_page = 20;
+$machines_offset = ($machines_page - 1) * $machines_per_page;
+
+$machines_where_conditions = [];
+$machines_params = [];
+
+if (!empty($search_machines)) {
+    $machines_where_conditions[] = "(name LIKE ? OR serial_number LIKE ? OR processor LIKE ?)";
+    $search_machines_param = "%$search_machines%";
+    $machines_params = [$search_machines_param, $search_machines_param, $search_machines_param];
+}
+if (!empty($machines_status_filter)) {
+    $machines_where_conditions[] = "status = ?";
+    $machines_params[] = $machines_status_filter;
+}
+
+$machines_where_clause = !empty($machines_where_conditions) ? 'WHERE ' . implode(' AND ', $machines_where_conditions) : '';
+
+try {
+    $machines_count_sql = "SELECT COUNT(*) as total FROM ready_machines $machines_where_clause";
+    $machines_count_stmt = $pdo->prepare($machines_count_sql);
+    $machines_count_stmt->execute($machines_params);
+    $total_machines = $machines_count_stmt->fetch()['total'];
+    $machines_total_pages = ceil($total_machines / $machines_per_page);
+    
+    $machines_sql = "SELECT * FROM ready_machines $machines_where_clause ORDER BY name ASC LIMIT ? OFFSET ?";
+    $machines_stmt = $pdo->prepare($machines_sql);
+    $machines_stmt->execute(array_merge($machines_params, [$machines_per_page, $machines_offset]));
+    $machines = $machines_stmt->fetchAll();
+    
+    $machines_error = '';
+} catch (PDOException $e) {
+    $machines_error = 'Erro ao carregar máquinas: ' . $e->getMessage();
+    $machines = [];
+    $total_machines = 0;
+    $machines_total_pages = 0;
 }
 
 // DADOS PARA ABA HISTÓRICO
@@ -541,23 +645,140 @@ function getWarrantyStatusBadge($endDate) {
 </div>
 
 <!-- Abas -->
-<ul class="nav nav-tabs mb-4" id="warrantyTabs">
-    <li class="nav-item">
-        <a class="nav-link <?php echo $current_tab === 'products' ? 'active' : ''; ?>" href="?tab=products">
-            <i class="fas fa-list me-2"></i> Produtos (<?php echo $total_products; ?>)
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link <?php echo $current_tab === 'suppliers' ? 'active' : ''; ?>" href="?tab=suppliers">
-            <i class="fas fa-building me-2"></i> Fornecedores
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link <?php echo $current_tab === 'templates' ? 'active' : ''; ?>" href="?tab=templates">
-            <i class="fas fa-file-invoice me-2"></i> Templates
-        </a>
-    </li>
-</ul>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <ul class="nav nav-tabs mb-0" id="warrantyTabs">
+        <li class="nav-item">
+            <a class="nav-link <?php echo $current_tab === 'products' ? 'active' : ''; ?>" href="?tab=products">
+                <i class="fas fa-list me-2"></i> Produtos (<?php echo $total_products; ?>)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <?php echo $current_tab === 'suppliers' ? 'active' : ''; ?>" href="?tab=suppliers">
+                <i class="fas fa-building me-2"></i> Fornecedores
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <?php echo $current_tab === 'machines' ? 'active' : ''; ?>" href="?tab=machines">
+                <i class="fas fa-desktop me-2"></i> Máquinas (<?php echo $total_machines; ?>)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <?php echo $current_tab === 'templates' ? 'active' : ''; ?>" href="?tab=templates">
+                <i class="fas fa-file-invoice me-2"></i> Templates
+            </a>
+        </li>
+    </ul>
+    
+    <!-- Botão de Export Otimizado -->
+    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
+        <i class="fas fa-download me-1"></i> Exportar Dados
+    </button>
+</div>
+
+<!-- Modal de Exportação -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-file-download me-2"></i> Exportar Dados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-4">Selecione o tipo de dados que deseja exportar em formato CSV:</p>
+                
+                <div class="row g-3">
+                    <!-- Garantias de Produtos -->
+                    <div class="col-md-6">
+                        <div class="card border-success cursor-pointer export-card" onclick="downloadExport('products')">
+                            <div class="card-body text-center">
+                                <i class="fas fa-box fa-2x text-success mb-2"></i>
+                                <h6 class="card-title">Garantias de Produtos</h6>
+                                <p class="card-text small text-muted">
+                                    Exporta: ID, Nome, SKU, Template, Fornecedor, Período, Notas
+                                </p>
+                                <small class="text-muted d-block mt-2">
+                                    📊 <?php 
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE has_warranty = 1");
+                                    $count = $stmt->fetch()['total'];
+                                    echo "$count registros";
+                                    ?>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Garantias de Máquinas -->
+                    <div class="col-md-6">
+                        <div class="card border-info cursor-pointer export-card" onclick="downloadExport('machines')">
+                            <div class="card-body text-center">
+                                <i class="fas fa-desktop fa-2x text-info mb-2"></i>
+                                <h6 class="card-title">Máquinas Prontas</h6>
+                                <p class="card-text small text-muted">
+                                    Exporta: Nome, Serial, Processador, Memória, Storage, Status
+                                </p>
+                                <small class="text-muted d-block mt-2">
+                                    📊 <?php 
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines");
+                                    $count = $stmt->fetch()['total'];
+                                    echo "$count registros";
+                                    ?>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Templates de Garantia -->
+                    <div class="col-md-6">
+                        <div class="card border-warning cursor-pointer export-card" onclick="downloadExport('templates')">
+                            <div class="card-body text-center">
+                                <i class="fas fa-file-contract fa-2x text-warning mb-2"></i>
+                                <h6 class="card-title">Templates de Garantia</h6>
+                                <p class="card-text small text-muted">
+                                    Exporta: Nome, Descrição, Período, Provedor, Notas, Status
+                                </p>
+                                <small class="text-muted d-block mt-2">
+                                    📊 <?php 
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM warranty_templates");
+                                    $count = $stmt->fetch()['total'];
+                                    echo "$count registros";
+                                    ?>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Fornecedores de Garantia -->
+                    <div class="col-md-6">
+                        <div class="card border-danger cursor-pointer export-card" onclick="downloadExport('suppliers')">
+                            <div class="card-body text-center">
+                                <i class="fas fa-building fa-2x text-danger mb-2"></i>
+                                <h6 class="card-title">Fornecedores de Garantia</h6>
+                                <p class="card-text small text-muted">
+                                    Exporta: Nome, CNPJ, Email, Telefone, Cidade, Estado, Status
+                                </p>
+                                <small class="text-muted d-block mt-2">
+                                    📊 <?php 
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM warranty_suppliers");
+                                    $count = $stmt->fetch()['total'];
+                                    echo "$count registros";
+                                    ?>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-4 mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Formato:</strong> CSV (Excel compatível) • <strong>Encoding:</strong> UTF-8 • <strong>Separador:</strong> Ponto e vírgula (;)
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- ===================================== ABA PRODUTOS ===================================== -->
 <?php if ($current_tab === 'products'): ?>
@@ -694,6 +915,154 @@ function getWarrantyStatusBadge($endDate) {
                 <?php if ($page < $total_pages): ?>
                     <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page + 1])); ?>"><i class="fas fa-angle-right"></i></a></li>
                     <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => $total_pages])); ?>"><i class="fas fa-angle-double-right"></i></a></li>
+                <?php endif; ?>
+            </ul>
+        </nav>
+    <?php endif; ?>
+<?php endif; ?>
+
+<!-- ===================================== ABA MÁQUINAS ===================================== -->
+<?php elseif ($current_tab === 'machines'): ?>
+
+<?php if (!empty($machines_error)): ?>
+    <div class="alert alert-danger" role="alert">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <?php echo htmlspecialchars($machines_error); ?>
+    </div>
+<?php endif; ?>
+
+<div class="card card-custom mb-4">
+    <div class="card-body">
+        <form method="GET" action="" class="row g-3">
+            <input type="hidden" name="tab" value="machines">
+            <div class="col-md-4">
+                <label for="search_machines" class="form-label form-label-custom"><i class="fas fa-search me-1"></i> Buscar</label>
+                <input type="text" class="form-control form-control-custom" id="search_machines" name="search_machines" placeholder="Nome, Serial, Processador..." value="<?php echo htmlspecialchars($search_machines); ?>">
+            </div>
+            <div class="col-md-3">
+                <label for="machines_status" class="form-label form-label-custom"><i class="fas fa-info-circle me-1"></i> Status</label>
+                <select class="form-select form-control-custom" id="machines_status" name="machines_status">
+                    <option value="">Todos</option>
+                    <option value="available" <?php echo $machines_status_filter === 'available' ? 'selected' : ''; ?>>Disponível</option>
+                    <option value="in_use" <?php echo $machines_status_filter === 'in_use' ? 'selected' : ''; ?>>Em Uso</option>
+                    <option value="defective" <?php echo $machines_status_filter === 'defective' ? 'selected' : ''; ?>>Defeituoso</option>
+                    <option value="maintenance" <?php echo $machines_status_filter === 'maintenance' ? 'selected' : ''; ?>>Manutenção</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary-custom"><i class="fas fa-filter me-1"></i> Filtrar</button>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid">
+                    <a href="?tab=machines" class="btn btn-outline-secondary"><i class="fas fa-times me-1"></i> Limpar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php if (empty($machines)): ?>
+    <div class="text-center py-5">
+        <i class="fas fa-laptop fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">Nenhuma máquina encontrada</h5>
+        <p class="text-muted">Adicione máquinas prontas ou ajuste seus filtros.</p>
+    </div>
+<?php else: ?>
+    <div class="card card-custom">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-header-custom">
+                        <tr>
+                            <th>Máquina</th>
+                            <th>Serial</th>
+                            <th>Processador</th>
+                            <th>Memória</th>
+                            <th>Storage</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($machines as $machine): ?>
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3">
+                                            <i class="fas fa-laptop fa-2x text-info"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-0"><?php echo htmlspecialchars($machine['name']); ?></h6>
+                                            <?php if (!empty($machine['model'])): ?>
+                                                <small class="text-muted"><?php echo htmlspecialchars($machine['model']); ?></small>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code class="bg-light p-2 rounded"><?php echo htmlspecialchars($machine['serial_number'] ?: 'N/A'); ?></code>
+                                </td>
+                                <td><?php echo htmlspecialchars($machine['processor'] ?: 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($machine['memory'] ?: 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($machine['storage'] ?: 'N/A'); ?></td>
+                                <td>
+                                    <span class="badge <?php 
+                                        $status_classes = [
+                                            'available' => 'bg-success',
+                                            'in_use' => 'bg-warning text-dark',
+                                            'defective' => 'bg-danger',
+                                            'maintenance' => 'bg-info'
+                                        ];
+                                        echo $status_classes[$machine['status']] ?? 'bg-secondary';
+                                    ?>">
+                                        <?php 
+                                            $status_texts = [
+                                                'available' => 'Disponível',
+                                                'in_use' => 'Em Uso',
+                                                'defective' => 'Defeituoso',
+                                                'maintenance' => 'Manutenção'
+                                            ];
+                                            echo $status_texts[$machine['status']] ?? ucfirst($machine['status']);
+                                        ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary" onclick="openActionModal('view_machine.php?id=<?php echo $machine['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($machine['name'])); ?>')" title="Visualizar"><i class="fas fa-eye"></i></button>
+                                        <button type="button" class="btn btn-outline-info" onclick="openActionModal('edit_warranty_machine.php?id=<?php echo $machine['id']; ?>&modal=true', 'Editar Garantia: <?php echo htmlspecialchars(addslashes($machine['name'])); ?>')" title="Editar Garantia"><i class="fas fa-shield-alt"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <?php if ($machines_total_pages > 1): ?>
+        <nav aria-label="Paginação de máquinas" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <?php if ($machines_page > 1): ?>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['machines_page' => 1])); ?>"><i class="fas fa-angle-double-left"></i></a></li>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['machines_page' => $machines_page - 1])); ?>"><i class="fas fa-angle-left"></i></a></li>
+                <?php endif; ?>
+                <?php 
+                $machines_start_page = max(1, $machines_page - 2);
+                $machines_end_page = min($machines_total_pages, $machines_page + 2);
+                for ($i = $machines_start_page; $i <= $machines_end_page; $i++): 
+                ?>
+                    <li class="page-item <?php echo $i === $machines_page ? 'active' : ''; ?>">
+                        <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['machines_page' => $i])); ?>"><?php echo $i; ?></a>
+                    </li>
+                <?php endfor; ?>
+                <?php if ($machines_page < $machines_total_pages): ?>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['machines_page' => $machines_page + 1])); ?>"><i class="fas fa-angle-right"></i></a></li>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['machines_page' => $machines_total_pages])); ?>"><i class="fas fa-angle-double-right"></i></a></li>
                 <?php endif; ?>
             </ul>
         </nav>
@@ -1079,6 +1448,10 @@ $suppliers = $stmt->fetchAll();
             <form action="" method="POST" id="createSupplierForm">
                 <input type="hidden" name="action" value="create_supplier">
                 <div class="modal-body">
+                    <div id="cnpj-duplicate-alert" class="alert alert-warning alert-dismissible fade show d-none" role="alert">
+                        <i class="fas fa-exclamation-triangle"></i> <strong>⚠ CNPJ Duplicado!</strong> Já existe um fornecedor com este CNPJ.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="supplier_name" class="form-label">Nome da Empresa *</label>
@@ -1086,7 +1459,7 @@ $suppliers = $stmt->fetchAll();
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="supplier_cnpj" class="form-label">CNPJ <small class="text-muted">(XX.XXX.XXX/0001-XX)</small></label>
-                            <input type="text" class="form-control" id="supplier_cnpj" name="supplier_cnpj" placeholder="XX.XXX.XXX/0001-XX" maxlength="18">
+                            <input type="text" class="form-control" id="supplier_cnpj" name="supplier_cnpj" placeholder="XX.XXX.XXX/0001-XX" maxlength="18" data-validate="cnpj">
                             <small id="cnpj-feedback" class="form-text"></small>
                         </div>
                     </div>
@@ -1097,7 +1470,8 @@ $suppliers = $stmt->fetchAll();
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="supplier_email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="supplier_email" name="supplier_email">
+                            <input type="email" class="form-control" id="supplier_email" name="supplier_email" data-validate="email">
+                            <small id="email-feedback" class="form-text"></small>
                         </div>
                     </div>
                     <div class="row">
@@ -1163,8 +1537,11 @@ $suppliers = $stmt->fetchAll();
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <div class="flex-grow-1">
+                        <small id="validation-errors" class="text-danger d-block mb-2"></small>
+                    </div>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Criar Fornecedor</button>
+                    <button type="submit" class="btn btn-primary" id="createSupplierSubmit">Criar Fornecedor</button>
                 </div>
             </form>
         </div>
@@ -1287,6 +1664,10 @@ $suppliers = $stmt->fetchAll();
                 <input type="hidden" name="action" value="update_supplier">
                 <input type="hidden" name="supplier_id" id="edit_supplier_id">
                 <div class="modal-body">
+                    <div id="edit_cnpj-duplicate-alert" class="alert alert-warning alert-dismissible fade show d-none" role="alert">
+                        <i class="fas fa-exclamation-triangle"></i> <strong>⚠ CNPJ Duplicado!</strong> Já existe outro fornecedor com este CNPJ.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="edit_supplier_name" class="form-label">Nome da Empresa *</label>
@@ -1294,7 +1675,7 @@ $suppliers = $stmt->fetchAll();
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="edit_supplier_cnpj" class="form-label">CNPJ <small class="text-muted">(XX.XXX.XXX/0001-XX)</small></label>
-                            <input type="text" class="form-control" id="edit_supplier_cnpj" name="supplier_cnpj" placeholder="XX.XXX.XXX/0001-XX" maxlength="18">
+                            <input type="text" class="form-control" id="edit_supplier_cnpj" name="supplier_cnpj" placeholder="XX.XXX.XXX/0001-XX" maxlength="18" data-validate="cnpj">
                             <small id="edit_cnpj-feedback" class="form-text"></small>
                         </div>
                     </div>
@@ -1305,7 +1686,8 @@ $suppliers = $stmt->fetchAll();
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="edit_supplier_email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="edit_supplier_email" name="supplier_email">
+                            <input type="email" class="form-control" id="edit_supplier_email" name="supplier_email" data-validate="email">
+                            <small id="edit_email-feedback" class="form-text"></small>
                         </div>
                     </div>
                     <div class="row">
@@ -1371,8 +1753,11 @@ $suppliers = $stmt->fetchAll();
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <div class="flex-grow-1">
+                        <small id="edit_validation-errors" class="text-danger d-block mb-2"></small>
+                    </div>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                    <button type="submit" class="btn btn-primary" id="editSupplierSubmit">Salvar Alterações</button>
                 </div>
             </form>
         </div>
@@ -1384,48 +1769,7 @@ $suppliers = $stmt->fetchAll();
 <script>
 // ===== VALIDAÇÕES E MÁSCARAS PARA FORNECEDOR =====
 
-// Função para validar CNPJ
-function validarCNPJ(cnpj) {
-    const num = cnpj.replace(/\D/g, '');
-    if (num.length !== 14) return false;
-    if (/^(\d)\1{13}$/.test(num)) return false;
-    
-    let size = num.length - 2;
-    let numbers = num.substring(0, size);
-    let digits = num.substring(size);
-    let sum = 0;
-    let pos = size - 7;
-    
-    for (let i = size; i >= 1; i--) {
-        sum += numbers.charAt(size - i) * pos--;
-        if (pos < 2) pos = 9;
-    }
-    
-    let result = sum % 11 < 2 ? 0 : 11 - sum % 11;
-    if (result !== parseInt(digits.charAt(0))) return false;
-    
-    size = num.length - 1;
-    numbers = num.substring(0, size);
-    sum = 0;
-    pos = size - 7;
-    
-    for (let i = size; i >= 1; i--) {
-        sum += numbers.charAt(size - i) * pos--;
-        if (pos < 2) pos = 9;
-    }
-    
-    result = sum % 11 < 2 ? 0 : 11 - sum % 11;
-    return result === parseInt(digits.charAt(1));
-}
-
-// Formatar CNPJ
-function formatarCNPJ(value) {
-    const num = value.replace(/\D/g, '');
-    if (num.length <= 2) return num;
-    if (num.length <= 5) return num.replace(/(\d{2})(\d+)/, '$1.$2');
-    if (num.length <= 8) return num.replace(/(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
-    return num.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
-}
+// CNPJ: Validação removida (agora é server-side apenas - PHP)
 
 // Validar DDD
 function validarDDD(ddd) {
@@ -1488,26 +1832,7 @@ function buscarCEP(cep) {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // CNPJ
-    const cnpjInput = document.getElementById('supplier_cnpj');
-    if (cnpjInput) {
-        cnpjInput.addEventListener('input', function() {
-            this.value = formatarCNPJ(this.value);
-            const feedback = document.getElementById('cnpj-feedback');
-            const cnpj = this.value;
-            if (cnpj.length === 18) {
-                if (validarCNPJ(cnpj)) {
-                    feedback.innerHTML = '✓ CNPJ válido';
-                    feedback.className = 'form-text text-success';
-                } else {
-                    feedback.innerHTML = '✗ CNPJ inválido';
-                    feedback.className = 'form-text text-danger';
-                }
-            } else {
-                feedback.innerHTML = '';
-            }
-        });
-    }
+    // CNPJ - REMOVIDO: Validação agora é apenas server-side (PHP)
     
     // Telefone
     const phoneInput = document.getElementById('supplier_phone');
@@ -1689,26 +2014,7 @@ function editFromView() {
 
 // Configurar validações para edição
 function setupEditValidations() {
-    const editCnpjInput = document.getElementById('edit_supplier_cnpj');
-    if (editCnpjInput && !editCnpjInput.hasListener) {
-        editCnpjInput.hasListener = true;
-        editCnpjInput.addEventListener('input', function() {
-            this.value = formatarCNPJ(this.value);
-            const feedback = document.getElementById('edit_cnpj-feedback');
-            const cnpj = this.value;
-            if (cnpj.length === 18) {
-                if (validarCNPJ(cnpj)) {
-                    feedback.innerHTML = '✓ CNPJ válido';
-                    feedback.className = 'form-text text-success';
-                } else {
-                    feedback.innerHTML = '✗ CNPJ inválido';
-                    feedback.className = 'form-text text-danger';
-                }
-            } else {
-                feedback.innerHTML = '';
-            }
-        });
-    }
+    // CNPJ - REMOVIDO: Validação agora é apenas server-side (PHP)
     
     const editPhoneInput = document.getElementById('edit_supplier_phone');
     if (editPhoneInput && !editPhoneInput.hasListener) {
@@ -1813,6 +2119,228 @@ function loadEditForm(templateId) {
 }
 
 // ========================================
+// VALIDAÇÃO DE FORNECEDOR EM TEMPO REAL
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Validação CREATE SUPPLIER
+    const createSupplierForm = document.getElementById('createSupplierForm');
+    const createSupplierSubmit = document.getElementById('createSupplierSubmit');
+    const validationErrors = document.getElementById('validation-errors');
+    
+    if (createSupplierForm) {
+        const cnpjInput = document.getElementById('supplier_cnpj');
+        const emailInput = document.getElementById('supplier_email');
+        const cnpjFeedback = document.getElementById('cnpj-feedback');
+        const emailFeedback = document.getElementById('email-feedback');
+        
+        function validateCNPJ(cnpj) {
+            if (!cnpj) return true; // Campo opcional
+            const num = cnpj.replace(/\D/g, '');
+            if (num.length !== 14) return false;
+            if (/^(\d)\1{13}$/.test(num)) return false;
+            // Validação básica do dígito verificador
+            return num.match(/^\d{14}$/);
+        }
+        
+        function validateEmail(email) {
+            if (!email) return true; // Campo opcional
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
+        
+        function checkValidation() {
+            let errors = [];
+            let isValid = true;
+            
+            // Validar CNPJ
+            if (cnpjInput.value) {
+                if (!validateCNPJ(cnpjInput.value)) {
+                    cnpjFeedback.innerHTML = '✗ CNPJ inválido ou incorreto';
+                    cnpjFeedback.className = 'form-text text-danger';
+                    errors.push('CNPJ inválido');
+                    isValid = false;
+                } else {
+                    // Verificar se CNPJ já existe via AJAX
+                    const cnpjNum = cnpjInput.value.replace(/\D/g, '');
+                    fetch(`?action=check_cnpj&cnpj=${encodeURIComponent(cnpjNum)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.exists) {
+                                cnpjFeedback.innerHTML = '✗ CNPJ já cadastrado';
+                                cnpjFeedback.className = 'form-text text-danger';
+                                document.getElementById('cnpj-duplicate-alert').classList.remove('d-none');
+                                createSupplierSubmit.disabled = true;
+                                createSupplierSubmit.style.opacity = '0.6';
+                                createSupplierSubmit.title = 'CNPJ já existe no sistema';
+                            } else {
+                                cnpjFeedback.innerHTML = '✓ CNPJ válido';
+                                cnpjFeedback.className = 'form-text text-success';
+                                document.getElementById('cnpj-duplicate-alert').classList.add('d-none');
+                                // Revalidar se não há outros erros
+                                if (document.querySelectorAll('.form-text.text-danger').length === 0) {
+                                    createSupplierSubmit.disabled = false;
+                                    createSupplierSubmit.style.opacity = '1';
+                                    createSupplierSubmit.title = '';
+                                }
+                            }
+                        })
+                        .catch(e => console.error('Erro ao verificar CNPJ:', e));
+                }
+            } else {
+                cnpjFeedback.innerHTML = '';
+                document.getElementById('cnpj-duplicate-alert').classList.add('d-none');
+            }
+            
+            // Validar Email
+            if (emailInput.value) {
+                if (!validateEmail(emailInput.value)) {
+                    emailFeedback.innerHTML = '✗ Email inválido';
+                    emailFeedback.className = 'form-text text-danger';
+                    errors.push('Email inválido');
+                    isValid = false;
+                } else {
+                    emailFeedback.innerHTML = '✓ Email válido';
+                    emailFeedback.className = 'form-text text-success';
+                }
+            } else {
+                emailFeedback.innerHTML = '';
+            }
+            
+            // Mostrar erro genérico (sem considerar duplicado pois já trata)
+            let hasErrors = document.querySelectorAll('.form-text.text-danger').length > 0;
+            if (hasErrors) {
+                createSupplierSubmit.disabled = true;
+                createSupplierSubmit.style.opacity = '0.6';
+                createSupplierSubmit.title = 'Corrija os erros antes de salvar';
+            } else if (!document.getElementById('cnpj-duplicate-alert').classList.contains('d-none')) {
+                // Se há alert de duplicado, já desabilitou acima
+            } else {
+                createSupplierSubmit.disabled = false;
+                createSupplierSubmit.style.opacity = '1';
+                createSupplierSubmit.title = '';
+            }
+            
+            return isValid;
+        }
+        
+        // Event listeners
+        cnpjInput.addEventListener('input', checkValidation);
+        emailInput.addEventListener('input', checkValidation);
+        
+        // Validar ao submeter
+        createSupplierForm.addEventListener('submit', function(e) {
+            if (!checkValidation()) {
+                e.preventDefault();
+            }
+        });
+    }
+    
+    // Validação EDIT SUPPLIER
+    const editSupplierForm = document.getElementById('editSupplierForm');
+    const editSupplierSubmit = document.getElementById('editSupplierSubmit');
+    const editValidationErrors = document.getElementById('edit_validation-errors');
+    
+    if (editSupplierForm) {
+        const editCnpjInput = document.getElementById('edit_supplier_cnpj');
+        const editEmailInput = document.getElementById('edit_supplier_email');
+        const editCnpjFeedback = document.getElementById('edit_cnpj-feedback');
+        const editEmailFeedback = document.getElementById('edit_email-feedback');
+        
+        function validateCNPJ(cnpj) {
+            if (!cnpj) return true;
+            const num = cnpj.replace(/\D/g, '');
+            if (num.length !== 14) return false;
+            if (/^(\d)\1{13}$/.test(num)) return false;
+            return num.match(/^\d{14}$/);
+        }
+        
+        function validateEmail(email) {
+            if (!email) return true;
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
+        
+        function checkValidation() {
+            let errors = [];
+            let isValid = true;
+            const supplierId = document.getElementById('edit_supplier_id').value;
+            
+            if (editCnpjInput.value) {
+                if (!validateCNPJ(editCnpjInput.value)) {
+                    editCnpjFeedback.innerHTML = '✗ CNPJ inválido ou incorreto';
+                    editCnpjFeedback.className = 'form-text text-danger';
+                    errors.push('CNPJ inválido');
+                    isValid = false;
+                } else {
+                    // Verificar se CNPJ já existe em outro fornecedor via AJAX
+                    const cnpjNum = editCnpjInput.value.replace(/\D/g, '');
+                    fetch(`?action=check_cnpj&cnpj=${encodeURIComponent(cnpjNum)}&exclude_id=${supplierId}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.exists) {
+                                editCnpjFeedback.innerHTML = '✗ CNPJ já cadastrado em outro fornecedor';
+                                editCnpjFeedback.className = 'form-text text-danger';
+                                document.getElementById('edit_cnpj-duplicate-alert').classList.remove('d-none');
+                                editSupplierSubmit.disabled = true;
+                                editSupplierSubmit.style.opacity = '0.6';
+                                editSupplierSubmit.title = 'CNPJ já existe em outro fornecedor';
+                            } else {
+                                editCnpjFeedback.innerHTML = '✓ CNPJ válido';
+                                editCnpjFeedback.className = 'form-text text-success';
+                                document.getElementById('edit_cnpj-duplicate-alert').classList.add('d-none');
+                                if (document.querySelectorAll('.form-text.text-danger').length === 0) {
+                                    editSupplierSubmit.disabled = false;
+                                    editSupplierSubmit.style.opacity = '1';
+                                    editSupplierSubmit.title = '';
+                                }
+                            }
+                        })
+                        .catch(e => console.error('Erro ao verificar CNPJ:', e));
+                }
+            } else {
+                editCnpjFeedback.innerHTML = '';
+                document.getElementById('edit_cnpj-duplicate-alert').classList.add('d-none');
+            }
+            
+            if (editEmailInput.value) {
+                if (!validateEmail(editEmailInput.value)) {
+                    editEmailFeedback.innerHTML = '✗ Email inválido';
+                    editEmailFeedback.className = 'form-text text-danger';
+                    errors.push('Email inválido');
+                    isValid = false;
+                } else {
+                    editEmailFeedback.innerHTML = '✓ Email válido';
+                    editEmailFeedback.className = 'form-text text-success';
+                }
+            } else {
+                editEmailFeedback.innerHTML = '';
+            }
+            
+            if (errors.length > 0) {
+                editValidationErrors.innerHTML = '⚠ Corrija os erros: ' + errors.join(', ');
+                editSupplierSubmit.disabled = true;
+                editSupplierSubmit.style.opacity = '0.6';
+                editSupplierSubmit.title = 'Corrija os erros antes de salvar';
+            } else {
+                editValidationErrors.innerHTML = '';
+                editSupplierSubmit.disabled = false;
+                editSupplierSubmit.style.opacity = '1';
+                editSupplierSubmit.title = '';
+            }
+            
+            return isValid;
+        }
+        
+        editCnpjInput.addEventListener('input', checkValidation);
+        editEmailInput.addEventListener('input', checkValidation);
+        
+        editSupplierForm.addEventListener('submit', function(e) {
+            if (!checkValidation()) {
+                e.preventDefault();
+            }
+        });
+    }
+});
+
+// ========================================
 // VALIDAÇÃO DE NOME DUPLICADO EM TEMPO REAL
 // ========================================
 document.addEventListener('DOMContentLoaded', function() {
@@ -1855,6 +2383,55 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// ========================================
+// EXPORTAR DADOS - DOWNLOAD CSV
+// ========================================
+function downloadExport(type) {
+    const url = `export_warranties_csv.php?type=${type}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.click();
+    
+    // Fechar modal após clique
+    const modal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+
+// ========================================
+// CSS PARA CARDS DE EXPORT
+// ========================================
+const style = document.createElement('style');
+style.innerHTML = `
+    .export-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .export-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .export-card .card-body {
+        padding: 1.5rem;
+    }
+    
+    .export-card i {
+        transition: all 0.3s ease;
+    }
+    
+    .export-card:hover i {
+        transform: scale(1.1);
+    }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+`;
+document.head.appendChild(style);
 </script>
 
 <?php include 'includes/footer.php'; ?>
