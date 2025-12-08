@@ -75,14 +75,112 @@ if (!isset($GLOBALS['is_inside_machine_form'])) {
             </div>
 
             <!-- FOOTER DO MODAL -->
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                     <i class="fas fa-times me-1"></i>Fechar
                 </button>
-                <button type="button" class="btn btn-primary-custom" data-bs-dismiss="modal">
-                    <i class="fas fa-check me-1"></i>Confirmar
+                <button type="button" class="btn btn-primary-custom" onclick="syncWarrantyDataEditMachine()">
+                    <i class="fas fa-check me-1"></i>Aplicar Dados
                 </button>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    'use strict';
+
+    // ========================================
+    // SINCRONIZAR DADOS DO MODAL COM FORMULÁRIO
+    // ========================================
+    window.syncWarrantyDataEditMachine = function() {
+        const fields = [
+            'warranty_provider',
+            'warranty_period_value',
+            'warranty_period_unit'
+        ];
+
+        fields.forEach(field => {
+            const modalField = document.getElementById('machine_' + field);
+            const formField = document.getElementById('edit_' + field);
+
+            if (modalField && formField) {
+                formField.value = modalField.value;
+            }
+        });
+
+        // Fecha o modal
+        const modal = document.getElementById('warrantyModalMachineEdit');
+        if (modal) {
+            const bootstrapModal = bootstrap.Modal.getInstance(modal);
+            if (bootstrapModal) {
+                bootstrapModal.hide();
+            }
+        }
+
+        // Atualiza o resumo
+        if (typeof updateWarrantySummaryMachine === 'function') {
+            updateWarrantySummaryMachine();
+        }
+
+        if (typeof showAlert === 'function') {
+            showAlert('Dados de garantia aplicados!', 'success');
+        }
+    };
+
+    // Carregar dados ao abrir o modal
+    const modalMachine = document.getElementById('warrantyModalMachineEdit');
+    if (modalMachine) {
+        modalMachine.addEventListener('show.bs.modal', function() {
+            // Carregar dados dos campos hidden para o modal
+            const fields = [
+                'warranty_provider',
+                'warranty_period_value',
+                'warranty_period_unit'
+            ];
+
+            fields.forEach(field => {
+                const modalField = document.getElementById('machine_' + field);
+                const formField = document.getElementById('edit_' + field);
+
+                if (modalField && formField) {
+                    modalField.value = formField.value || '';
+                }
+            });
+        });
+    }
+})();
+</script>
+
+<style>
+.warranty-section {
+    border-left: 4px solid #e9ecef;
+    padding-left: 15px;
+}
+
+.warranty-section:hover {
+    border-left-color: #0d6efd;
+    transition: all 0.3s ease;
+}
+
+.section-header {
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
+}
+
+.warranty-details-section {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>

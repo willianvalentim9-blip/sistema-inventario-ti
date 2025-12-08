@@ -25,9 +25,12 @@ if ($product_id <= 0) {
 
 try {
     $pdo = getConnection();
-    $stmt = $pdo->prepare("SELECT id, name, warranty_start_date, warranty_end_date, warranty_provider, invoice_number, warranty_notes, warranty_period_value, warranty_period_unit, warranty_ticket_number, warranty_label, warranty_client_name, warranty_supplier_id FROM products WHERE id = ? AND has_warranty = 1");
+    $stmt = $pdo->prepare("SELECT id, name, has_warranty, warranty_start_date, warranty_end_date, warranty_provider, invoice_number, warranty_notes, warranty_period_value, warranty_period_unit, warranty_ticket_number, warranty_label, warranty_client_name, warranty_supplier_id FROM products WHERE id = ?");
     $stmt->execute([$product_id]);
     $product = $stmt->fetch();
+
+    // IMPORTANTE: Guarda o estado anterior de has_warranty para decidir redirecionamento
+    $had_warranty_before = ($product['has_warranty'] == 1);
     
     if (!$product) {
         $error_msg = 'Produto com garantia não encontrado.';
@@ -211,7 +214,7 @@ try {
         logAdminActivity($_SESSION["user_id"], "UPDATE_WARRANTY", "products", $product_id, $old_data, $new_data);
 
         // Registra no histórico de garantias
-        registerWarrantyHistory($pdo, $product_id, 'UPDATE', $old_data, $new_data, $_SESSION["user_id"]);
+        registerWarrantyHistory($pdo, $product_id, 'UPDATE', $old_data, $new_data, $_SESSION["user_id"], 'product');
 
         $pdo->commit();
         
@@ -225,8 +228,19 @@ try {
             exit();
         }
         
-        // Redireciona de volta para a lista de garantias
-        header('Location: warranties.php');
+        // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
+        // Se o produto NÃO tinha garantia antes ($had_warranty_before == false),
+        // e agora foi adicionada garantia completa, redireciona para warranties.php
+        // Caso contrário, volta para a página de origem
+
+        if (!$had_warranty_before) {
+            // Novo cadastro de garantia - vai para a página de garantias
+            header('Location: warranties.php');
+        } else {
+            // Atualização de garantia existente - volta para página de origem
+            $return_to = $_POST['return_to'] ?? 'products.php';
+            header('Location: ' . $return_to);
+        }
         exit();
 
     } catch (PDOException $e) {
@@ -279,7 +293,10 @@ if (isset($_SESSION['flash_message'])) {
                 </div>
                 <div class="card-body">
                     <form method="POST" action="edit_warranty.php?id=<?php echo $product['id']; ?><?php echo $is_modal ? '&modal=true' : ''; ?>" id="editWarrantyForm">
-                        
+
+                        <!-- Campo hidden para retornar à página de origem -->
+                        <input type="hidden" name="return_to" value="<?php echo htmlspecialchars($_GET['return_to'] ?? $_SERVER['HTTP_REFERER'] ?? 'products.php'); ?>">
+
                         <div id="edit-warranty-error-message" class="mb-3">
                             <?php echo $form_message; ?>
                         </div>
@@ -440,7 +457,8 @@ const originalData = {
     warranty_ticket_number: '<?php echo htmlspecialchars($product['warranty_ticket_number'] ?? ''); ?>',
     warranty_label: '<?php echo htmlspecialchars($product['warranty_label'] ?? ''); ?>',
     warranty_client_name: '<?php echo htmlspecialchars($product['warranty_client_name'] ?? ''); ?>',
-    warranty_supplier_id: '<?php echo htmlspecialchars($product['warranty_supplier_id'] ?? ''); ?>'
+    warranty_supplier_id: '<?php echo htmlspecialchars($product['warranty_supplier_id'] ?? ''); ?>',
+    invoice_number: '<?php echo htmlspecialchars($product['invoice_number'] ?? ''); ?>'
 };
 
 // ========================================
@@ -523,17 +541,28 @@ function initializeWarrantyListeners() {
     // ========================================
     function checkForDuplicates() {
         console.log('🔍 Verificando duplicatas...');
-        
+
+        const ticketInput = document.getElementById('warranty_ticket_number');
+        const labelInput = document.getElementById('warranty_label');
+        const clientInput = document.getElementById('warranty_client_name');
+        const supplierSelect = document.getElementById('warranty_supplier_id');
+        const invoiceInput = document.getElementById('invoice_number');
+
         const currentData = {
             warranty_provider: providerInput ? providerInput.value : '',
             warranty_start_date: startDateInput.value,
             warranty_period_value: periodValueInput.value,
             warranty_period_unit: periodUnitInput.value,
             warranty_end_date: endDateInput.value,
-            warranty_notes: notesInput ? notesInput.value : ''
+            warranty_notes: notesInput ? notesInput.value : '',
+            warranty_ticket_number: ticketInput ? ticketInput.value : '',
+            warranty_label: labelInput ? labelInput.value : '',
+            warranty_client_name: clientInput ? clientInput.value : '',
+            warranty_supplier_id: supplierSelect ? supplierSelect.value : '',
+            invoice_number: invoiceInput ? invoiceInput.value : ''
         };
 
-        // Compara com dados originais
+        // Compara com dados originais - TODOS os campos
         const isDuplicate = Object.keys(currentData).every(key => {
             return currentData[key] === originalData[key];
         });
@@ -692,11 +721,13 @@ function initializeWarrantyListeners() {
     const labelInput = document.getElementById('warranty_label');
     const clientInput = document.getElementById('warranty_client_name');
     const supplierSelect = document.getElementById('warranty_supplier_id');
-    
+    const invoiceInput = document.getElementById('invoice_number');
+
     if (ticketInput) ticketInput.addEventListener('input', checkForDuplicates);
     if (labelInput) labelInput.addEventListener('input', checkForDuplicates);
     if (clientInput) clientInput.addEventListener('input', checkForDuplicates);
     if (supplierSelect) supplierSelect.addEventListener('change', checkForDuplicates);
+    if (invoiceInput) invoiceInput.addEventListener('input', checkForDuplicates);
 
     // ========================================
     // INICIALIZA SE JÁ HOUVER DADOS
@@ -704,8 +735,12 @@ function initializeWarrantyListeners() {
     if (startDateInput.value && periodValueInput.value && periodUnitInput.value) {
         console.log('📝 Inicializando com valores existentes...');
         calculateEndDate();
-        checkForDuplicates(); // Verifica duplicatas no carregamento
     }
+
+    // SEMPRE verifica duplicatas no carregamento para desabilitar o botão se necessário
+    setTimeout(() => {
+        checkForDuplicates();
+    }, 100);
 
     console.log('✔️ Listeners de garantia inicializados com sucesso!');
 

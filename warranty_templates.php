@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Verificar permissão de admin
-if ($_SESSION['user_role'] !== 'admin') {
+if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
     header('Location: dashboard.php');
     exit;
 }
@@ -319,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // ===== EXCLUIR TEMPLATE =====
+    // ===== EXCLUIR TEMPLATE (SOFT DELETE) =====
     if ($action === 'delete') {
         $template_id = intval($_POST['template_id'] ?? 0);
 
@@ -332,32 +332,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             // Obter dados do template antes de excluir (para log)
-            $stmt_get = $pdo->prepare("SELECT name FROM warranty_templates WHERE id = ?");
+            $stmt_get = $pdo->prepare("SELECT name FROM warranty_templates WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
             $stmt_get->execute([$template_id]);
             $template_data = $stmt_get->fetch();
 
             if (!$template_data) {
-                throw new Exception('Template não encontrado');
-            }
-
-            // Verificar se template está sendo usado
-            $stmt_check = $pdo->prepare("
-                SELECT COUNT(*) as count FROM products 
-                WHERE warranty_template_id = ?
-            ");
-            $stmt_check->execute([$template_id]);
-            $usage = $stmt_check->fetch();
-
-            if ($usage['count'] > 0) {
-                $_SESSION['flash_message'] = '✗ Não é possível excluir! Este template está vinculado a ' . $usage['count'] . ' produto(s).';
+                $_SESSION['flash_message'] = '✗ Template não encontrado ou já foi excluído';
                 $_SESSION['flash_type'] = 'warning';
                 header('Location: warranty_templates.php');
                 exit;
             }
 
-            // Excluir template
-            $stmt = $pdo->prepare("DELETE FROM warranty_templates WHERE id = ?");
-            $stmt->execute([$template_id]);
+            // SOFT DELETE: Marcar como deletado
+            $stmt = $pdo->prepare("
+                UPDATE warranty_templates
+                SET is_deleted = TRUE,
+                    deleted_at = NOW(),
+                    deleted_by = ?,
+                    is_active = 0
+                WHERE id = ?
+            ");
+            $stmt->execute([$_SESSION['user_id'], $template_id]);
 
             $_SESSION['flash_message'] = '✓ Template "' . htmlspecialchars($template_data['name']) . '" excluído com sucesso!';
             $_SESSION['flash_type'] = 'success';
@@ -387,7 +382,7 @@ $edit_template = null;
 if ($action_mode === 'edit') {
     $template_id = intval($_GET['id'] ?? 0);
     if ($template_id > 0) {
-        $stmt = $pdo->prepare("SELECT * FROM warranty_templates WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT * FROM warranty_templates WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
         $stmt->execute([$template_id]);
         $edit_template = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -403,12 +398,23 @@ if ($action_mode === 'edit') {
 // Obter lista de templates
 $filter_active = $_GET['filter'] ?? 'active'; // 'active', 'inactive', 'all'
 
-$sql = "SELECT * FROM warranty_templates";
+// Obter contagens para as abas
+$stmt_count_active = $pdo->query("SELECT COUNT(*) as count FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND is_active = 1");
+$count_active = $stmt_count_active->fetch()['count'];
+
+$stmt_count_inactive = $pdo->query("SELECT COUNT(*) as count FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND is_active = 0");
+$count_inactive = $stmt_count_inactive->fetch()['count'];
+
+$stmt_count_all = $pdo->query("SELECT COUNT(*) as count FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL)");
+$count_all = $stmt_count_all->fetch()['count'];
+
+// Query principal com filtro
+$sql = "SELECT * FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL)";
 
 if ($filter_active === 'active') {
-    $sql .= " WHERE is_active = 1";
+    $sql .= " AND is_active = 1";
 } elseif ($filter_active === 'inactive') {
-    $sql .= " WHERE is_active = 0";
+    $sql .= " AND is_active = 0";
 }
 
 $sql .= " ORDER BY CASE WHEN is_active = 1 THEN 0 ELSE 1 END, name ASC";
@@ -448,21 +454,21 @@ include 'includes/header.php';
 <!-- Aba de filtros -->
 <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
-        <a class="nav-link <?php echo $filter_active === 'active' ? 'active' : ''; ?>" 
+        <a class="nav-link <?php echo $filter_active === 'active' ? 'active' : ''; ?>"
            href="?filter=active">
-            Ativos (<?php echo count(array_filter($templates, fn($t) => $t['is_active'])); ?>)
+            Ativos (<?php echo $count_active; ?>)
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link <?php echo $filter_active === 'inactive' ? 'active' : ''; ?>" 
+        <a class="nav-link <?php echo $filter_active === 'inactive' ? 'active' : ''; ?>"
            href="?filter=inactive">
-            Inativos (<?php echo count(array_filter($templates, fn($t) => !$t['is_active'])); ?>)
+            Inativos (<?php echo $count_inactive; ?>)
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link <?php echo $filter_active === 'all' ? 'active' : ''; ?>" 
+        <a class="nav-link <?php echo $filter_active === 'all' ? 'active' : ''; ?>"
            href="?filter=all">
-            Todos (<?php echo count($templates); ?>)
+            Todos (<?php echo $count_all; ?>)
         </a>
     </li>
 </ul>

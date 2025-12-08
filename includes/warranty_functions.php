@@ -424,77 +424,47 @@ function getActiveTemplates($pdo) {
  * @param int $user_id ID do usuário
  * @return bool Sucesso ou falha
  */
-function registerWarrantyHistory($pdo, $product_id, $action, $old_values = [], $new_values = [], $user_id = null) {
-    global $userId; // Fallback se $user_id não for fornecido
-
-    try {
-        $user_id = $user_id ?? $userId ?? 0;
-
-        $stmt = $pdo->prepare("
-            INSERT INTO warranty_history (
-                product_id,
-                action_type,
-                old_values,
-                new_values,
-                user_id,
-                change_description,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, NOW())
-        ");
-
-        $old_json = json_encode($old_values);
-        $new_json = json_encode($new_values);
-        
-        // Descrição padrão baseada no tipo de ação
-        $descriptions = [
-            'CREATE' => 'Garantia criada',
-            'UPDATE' => 'Garantia atualizada automaticamente',
-            'DELETE' => 'Garantia removida',
-            'CLAIM' => 'Acionamento de garantia registrado'
-        ];
-        $description = $descriptions[$action] ?? 'Alteração registrada';
-
-        return $stmt->execute([
-            $product_id,
-            $action,
-            $old_json,
-            $new_json,
-            $user_id,
-            $description
-        ]);
-    } catch (PDOException $e) {
-        error_log("Erro ao registrar histórico: " . $e->getMessage());
-        return false;
-    }
-}
 
 /**
- * Obtém histórico de garantia de um produto
+ * Obtém histórico de garantia de um produto, máquina ou item de armazém
  * 
  * @param PDO $pdo Conexão com banco
- * @param int $product_id ID do produto
+ * @param int $id ID do produto/máquina/armazém
  * @param int $limit Limite de registros
+ * @param string $type Tipo: 'product', 'machine', ou 'warehouse' (padrão: 'product')
  * @return array Histórico ordenado por data decrescente
  */
-function getWarrantyHistory($pdo, $product_id, $limit = 50) {
+function getWarrantyHistory($pdo, $id, $limit = 50, $type = 'product') {
     try {
-        $stmt = $pdo->prepare("
-            SELECT 
+        // Usar query apropriada baseado no tipo
+        if ($type === 'machine') {
+            $column = 'machine_id';
+        } elseif ($type === 'warehouse') {
+            $column = 'warehouse_id';
+        } else {
+            $column = 'product_id';
+        }
+        
+        // Construir query dinamicamente (seguro pois $column é whitelist)
+        $query = "
+            SELECT
                 h.id,
                 h.action_type as action,
                 h.old_values,
                 h.new_values,
                 h.created_at,
                 h.change_description,
-                u.name as user_name,
+                COALESCE(u.full_name, u.username) as user_name,
                 u.email as user_email
             FROM warranty_history h
             LEFT JOIN users u ON h.user_id = u.id
-            WHERE h.product_id = ?
+            WHERE h.{$column} = ?
             ORDER BY h.created_at DESC
             LIMIT ?
-        ");
-        $stmt->execute([$product_id, $limit]);
+        ";
+        
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([$id, $limit]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         error_log("Erro ao obter histórico: " . $e->getMessage());

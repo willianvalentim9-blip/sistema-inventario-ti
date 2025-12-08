@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // ===== EXCLUIR FORNECEDOR =====
+    // ===== EXCLUIR FORNECEDOR (SOFT DELETE) =====
     if ($action === 'delete_supplier') {
         $supplier_id = intval($_POST['supplier_id'] ?? 0);
         if ($supplier_id <= 0) {
@@ -139,22 +139,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_type'] = 'danger';
         } else {
             try {
-                // Verificar se está sendo usado
-                $stmt_check = $pdo->prepare("SELECT COUNT(*) as count FROM products WHERE warranty_supplier_id = ?");
-                $stmt_check->execute([$supplier_id]);
-                $usage = $stmt_check->fetch();
+                // Obter dados antes de excluir
+                $stmt_get = $pdo->prepare("SELECT name FROM warranty_suppliers WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
+                $stmt_get->execute([$supplier_id]);
+                $supplier_data = $stmt_get->fetch();
 
-                if ($usage['count'] > 0) {
-                    $_SESSION['flash_message'] = '✗ Não é possível excluir! Este fornecedor está vinculado a ' . $usage['count'] . ' produto(s).';
+                if (!$supplier_data) {
+                    $_SESSION['flash_message'] = '✗ Fornecedor não encontrado ou já foi excluído';
                     $_SESSION['flash_type'] = 'warning';
                 } else {
-                    // Obter dados antes de excluir
-                    $stmt_get = $pdo->prepare("SELECT name FROM warranty_suppliers WHERE id = ?");
-                    $stmt_get->execute([$supplier_id]);
-                    $supplier_data = $stmt_get->fetch();
-
-                    $stmt = $pdo->prepare("DELETE FROM warranty_suppliers WHERE id = ?");
-                    $stmt->execute([$supplier_id]);
+                    // SOFT DELETE: Marcar como deletado
+                    $stmt = $pdo->prepare("
+                        UPDATE warranty_suppliers
+                        SET is_deleted = TRUE,
+                            deleted_at = NOW(),
+                            deleted_by = ?,
+                            is_active = 0
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$_SESSION['user_id'], $supplier_id]);
 
                     $_SESSION['flash_message'] = '✓ Fornecedor "' . htmlspecialchars($supplier_data['name']) . '" excluído com sucesso!';
                     $_SESSION['flash_type'] = 'success';
@@ -182,6 +185,9 @@ $offset = ($page - 1) * $per_page;
 
 $where_conditions = [];
 $params = [];
+
+// SEMPRE excluir itens deletados (soft delete)
+$where_conditions[] = "(is_deleted = FALSE OR is_deleted IS NULL)";
 
 if (!empty($search)) {
     $where_conditions[] = "(name LIKE ? OR cnpj LIKE ? OR email LIKE ? OR contact_person LIKE ?)";

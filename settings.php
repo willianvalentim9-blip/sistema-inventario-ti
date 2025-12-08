@@ -222,7 +222,7 @@ if (isset($_SESSION["flash_message"])) {
                 <p class="text-muted small">Acesse os registros e ferramentas de diagnóstico.</p>
                 <div class="d-grid gap-2">
                     <a href="admin_logs.php" class="btn btn-outline-secondary"><i class="fas fa-shield-alt me-2"></i>Logs de Administrador</a>
-                    <a href="diagnostico.php" class="btn btn-outline-info" target="_blank"><i class="fas fa-stethoscope me-2"></i>Diagnóstico do Servidor</a>
+                    <a href="Diagnostico/" class="btn btn-outline-info" target="_blank"><i class="fas fa-stethoscope me-2"></i>Central de Diagnósticos</a>
                 </div>
             </div>
         </div>

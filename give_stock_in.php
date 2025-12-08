@@ -82,7 +82,14 @@ try {
         $unit_price
     );
 
-    $response = ['success' => true, 'message' => 'Entrada de estoque registrada com sucesso!'];
+    // ===== NOVO: Verifica estoque baixo após a entrada =====
+    $low_stock_alert = checkAndLogLowStock($product_id);
+    
+    $response = [
+        'success' => true, 
+        'message' => 'Entrada de estoque registrada com sucesso!',
+        'low_stock_alert' => $low_stock_alert
+    ];
     ob_end_clean();
     echo json_encode($response);
 

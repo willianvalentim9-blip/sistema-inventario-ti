@@ -16,10 +16,13 @@ if ($product_id <= 0) {
 
 try {
     $pdo = getConnection();
-    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
     $stmt->execute([$product_id]);
     $product = $stmt->fetch();
-    
+
+    // IMPORTANTE: Guarda o estado anterior de has_warranty para decidir redirecionamento
+    $had_warranty_before = isset($product['has_warranty']) && $product['has_warranty'] == 1;
+
     if (!$product) {
         if (!$is_modal) header('Location: products.php');
         exit('Produto não encontrado.');
@@ -66,16 +69,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validações
     if (empty($name) || empty($category)) {
-        // Se der erro, mostramos a mensagem de erro no formulário
         $_SESSION['flash_message'] = 'Nome e Categoria são obrigatórios.';
         $_SESSION['flash_type'] = 'danger';
-        // Recarrega a página de edição para mostrar o erro
         header('Location: edit_product.php?id=' . $product_id . '&modal=true');
         exit;
-    } 
-    
+    }
+
+    if ($min_quantity < 1) {
+        $_SESSION['flash_message'] = '⚠️ AVISO: A quantidade mínima deve ser no mínimo 1. Defina um valor válido para o controle de estoque.';
+        $_SESSION['flash_type'] = 'warning';
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
+        exit;
+    }
+
+    if ($max_quantity < 1) {
+        $_SESSION['flash_message'] = '⚠️ AVISO: A quantidade máxima deve ser no mínimo 1. Defina um valor válido para o controle de estoque.';
+        $_SESSION['flash_type'] = 'warning';
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
+        exit;
+    }
+
+    if ($min_quantity == 1 && $max_quantity == 1) {
+        $_SESSION['flash_message'] = '⚠️ AVISO: A quantidade mínima e máxima não podem ser ambas 1. Defina valores diferentes para o controle de estoque.';
+        $_SESSION['flash_type'] = 'warning';
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
+        exit;
+    }
+
+    if ($min_quantity > $max_quantity && $max_quantity > 0) {
+        $_SESSION['flash_message'] = 'A quantidade mínima (' . $min_quantity . ') não pode ser maior que a quantidade máxima (' . $max_quantity . ').';
+        $_SESSION['flash_type'] = 'danger';
+        header('Location: edit_product.php?id=' . $product_id . '&modal=true');
+        exit;
+    }
+
     if ($max_quantity > 0 && $current_stock_quantity > $max_quantity) {
-        $_SESSION['flash_message'] = 'A quantidade máxima (' . $max_quantity . ') não pode ser menor que a quantidade atual em estoque (' . $current_stock_quantity . ').';
+        $_SESSION['flash_message'] = 'A quantidade máxima (' . $max_quantity . ') não pode ser menor que a quantidade atual em estoque (' . $current_stock_quantity . '). O produto está no limite máximo de estoque.';
         $_SESSION['flash_type'] = 'danger';
         header('Location: edit_product.php?id=' . $product_id . '&modal=true');
         exit;
@@ -109,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $product_id
         ]);
         
-        $new_data_stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
+        $new_data_stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
         $new_data_stmt->execute([$product_id]);
         $new_data = $new_data_stmt->fetch();
 
@@ -120,14 +149,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Seta a mensagem de sucesso
         $_SESSION['flash_message'] = 'Produto atualizado com sucesso!';
         $_SESSION['flash_type'] = 'success';
-        
-        // Se for requisição modal, redirecionar para warranties.php
-        if ($is_modal) {
+
+        // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
+        // Se NÃO tinha garantia antes e AGORA foi marcado has_warranty = 1, vai para warranties.php
+        // Caso contrário, volta para products.php
+
+        if (!$had_warranty_before && $has_warranty == 1) {
+            // Novo cadastro de garantia - vai para a página de garantias
             header('Location: warranties.php');
             exit();
         }
-        
-        // Redireciona de volta para a lista de produtos
+
+        // Atualização normal ou desmarcou garantia - volta para produtos
         header('Location: products.php');
         exit();
 
@@ -159,6 +192,9 @@ if (!$is_modal) {
     include 'includes/header.php';
 }
 ?>
+
+<!-- Link CSS para Media Upload -->
+<link rel="stylesheet" href="CSS/media-upload.css">
 
 <form method="POST" action="edit_product.php?id=<?php echo $product['id']; ?>&modal=true" enctype="multipart/form-data" id="editProductForm">
     
@@ -206,24 +242,39 @@ if (!$is_modal) {
             </div>
             <div class="mb-3">
                 <label class="form-label form-label-custom"><i class="fas fa-camera me-1"></i>Imagem do Produto</label>
-                <div class="upload-area border rounded p-4 text-center" id="product-upload-area" style="min-height: 150px; display: flex; align-items: center; justify-content: center;">
-                    <input type="file" class="form-control" id="product_image_input" accept="image/*" style="display: none;">
-                    
-                    <div id="product-placeholder" style="cursor: pointer; <?php echo !empty($product['image']) ? 'display: none;' : ''; ?>">
-                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                        <p class="text-muted mb-2">Clique aqui ou arraste uma imagem</p>
+                <div class="media-upload-container" id="product-upload-container">
+                    <div class="media-upload-placeholder" style="<?php echo !empty($product['image']) ? 'display: none;' : ''; ?>">
+                        <div class="media-upload-placeholder-content">
+                            <span class="media-upload-placeholder-icon">
+                                <i class="fas fa-image"></i>
+                            </span>
+                            <div class="media-upload-placeholder-title">Adicionar Imagem</div>
+                            <div class="media-upload-placeholder-subtitle">Escolha uma fonte</div>
+                            <div class="media-upload-actions">
+                                <button type="button" class="media-upload-btn" data-action="gallery">
+                                    <i class="fas fa-images"></i>
+                                    Galeria
+                                </button>
+                                <button type="button" class="media-upload-btn" data-action="camera">
+                                    <i class="fas fa-camera"></i>
+                                    Câmera
+                                </button>
+                            </div>
+                            <div class="media-upload-drag-hint">
+                                <i class="fas fa-hand-point-up"></i>
+                                Ou arraste aqui
+                            </div>
+                        </div>
                     </div>
-
-                    <div id="product-add-btn-container" class="text-center" style="display: none;">
-                        <button type="button" class="btn btn-outline-primary">
-                            <i class="fas fa-plus me-1"></i>Adicionar Imagem
-                        </button>
-                    </div>
-
-                    <div id="product-preview-container" style="<?php echo empty($product['image']) ? 'display: none;' : ''; ?>">
-                        <img id="product-preview-image" src="<?php echo !empty($product["image"]) ? 'uploads/products/' . htmlspecialchars($product["image"]) : ''; ?>" alt="Preview" class="img-thumbnail mb-2" style="max-width: 200px;">
-                        <div>
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="product-remove-btn"><i class="fas fa-trash me-1"></i>Remover Imagem</button>
+                    <div class="media-upload-preview" style="<?php echo empty($product['image']) ? 'display: none;' : ''; ?>">
+                        <img class="media-upload-preview-image" src="<?php echo !empty($product['image']) ? 'uploads/products/' . htmlspecialchars($product['image']) : ''; ?>" alt="Preview">
+                        <div class="media-upload-preview-overlay">
+                            <button type="button" class="media-upload-action-btn" data-action="change" title="Trocar imagem">
+                                <i class="fas fa-camera"></i>
+                            </button>
+                            <button type="button" class="media-upload-action-btn danger" data-action="remove" title="Remover imagem">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -260,24 +311,36 @@ if (!$is_modal) {
                 </div>
             </div>
             <div class="mb-3">
-                <label for="min_quantity" class="form-label form-label-custom"><i class="fas fa-exclamation-triangle text-warning me-1"></i>Qtd. Mínima</label>
-                <input type="number" class="form-control" id="min_quantity" name="min_quantity" value="<?php echo htmlspecialchars($product['min_quantity']); ?>" min="0">
+                <label for="min_quantity" class="form-label form-label-custom"><i class="fas fa-exclamation-triangle text-warning me-1"></i>Qtd. Mínima *</label>
+                <input type="number" class="form-control form-control-custom" id="min_quantity" name="min_quantity" value="<?php echo htmlspecialchars($product['min_quantity']); ?>" min="1" placeholder="Mínimo: 1" required>
+                <div class="form-text" id="min-quantity-help">Quantidade mínima para alerta de estoque baixo (mínimo: 1)</div>
+                <div class="invalid-feedback" id="min-quantity-error" style="display: none;">
+                    ⚠️ Valor mínimo necessário para salvar: 1
+                </div>
             </div>
-             <div class="mb-3">
-                <label for="max_quantity" class="form-label form-label-custom"><i class="fas fa-chart-line text-info me-1"></i>Qtd. Máxima</label>
-                <input type="number" class="form-control" id="max_quantity" name="max_quantity" value="<?php echo htmlspecialchars($product['max_quantity']); ?>" min="0">
+            <div class="mb-3">
+                <label for="max_quantity" class="form-label form-label-custom"><i class="fas fa-chart-line text-info me-1"></i>Qtd. Máxima *</label>
+                <input type="number" class="form-control form-control-custom" id="max_quantity" name="max_quantity" value="<?php echo htmlspecialchars($product['max_quantity']); ?>" min="1" placeholder="Mínimo: 1" required>
+                <div class="form-text" id="max-quantity-help">Quantidade máxima permitida no estoque (mínimo: 1)</div>
+                <div class="invalid-feedback" id="max-quantity-error" style="display: none;">
+                    ⚠️ Valor mínimo necessário para salvar: 1
+                </div>
+                <div class="invalid-feedback" id="max-quantity-stock-error" style="display: none;">
+                    ⚠️ A quantidade máxima não pode ser menor que o estoque atual (<?php echo $product['quantity']; ?> unidades)
+                </div>
+                <input type="hidden" id="current_stock_quantity" value="<?php echo $product['quantity']; ?>">
             </div>
             <div class="mb-3">
                 <label for="price" class="form-label form-label-custom"><i class="fas fa-dollar-sign me-1"></i>Preço (R$)</label>
-                <input type="text" class="form-control" id="price" name="price" value="<?php echo number_format($product['price'], 2, ',', '.'); ?>">
+                <input type="text" class="form-control form-control-custom" id="price" name="price" value="<?php echo number_format($product['price'], 2, ',', '.'); ?>">
             </div>
             <div class="mb-3">
                 <label for="location" class="form-label form-label-custom"><i class="fas fa-map-marker-alt me-1"></i>Localização</label>
-                <input type="text" class="form-control" id="location" name="location" value="<?php echo htmlspecialchars($product['location']); ?>">
+                <input type="text" class="form-control form-control-custom" id="location" name="location" value="<?php echo htmlspecialchars($product['location']); ?>">
             </div>
             <div class="mb-3">
                 <label for="status" class="form-label form-label-custom"><i class="fas fa-flag me-1"></i>Status</label>
-                <select class="form-select" id="status" name="status">
+                <select class="form-select form-control-custom" id="status" name="status">
                     <option value="available" <?php echo ($product['status'] ?? 'available') === 'available' ? 'selected' : ''; ?>>Disponível</option>
                     <option value="in_use" <?php echo ($product['status'] ?? '') === 'in_use' ? 'selected' : ''; ?>>Em Uso</option>
                     <option value="defective" <?php echo ($product['status'] ?? '') === 'defective' ? 'selected' : ''; ?>>Defeituoso</option>
@@ -326,7 +389,7 @@ if (!$is_modal) {
     </div>
     <div class="d-flex justify-content-end border-top pt-3 mt-3">
         <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancelar</button>
-        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Salvar Alterações</button>
+        <button type="submit" class="btn btn-primary" id="save-edit-product-btn"><i class="fas fa-save me-1"></i> Salvar Alterações</button>
     </div>
 </form>
 
@@ -341,41 +404,212 @@ if (!$is_modal) {
 ?>
 
 <script>
-// SCRIPTS PARA EDIT PRODUCT
-document.addEventListener('DOMContentLoaded', function() {
+// ========================================
+// FUNÇÃO DE INICIALIZAÇÃO (pode ser chamada múltiplas vezes)
+// ========================================
+function initEditProductValidation() {
+    console.log('🔧 Inicializando validação do produto...');
+
     const hasWarrantyCheckbox = document.getElementById('product_has_warranty');
     const editWarrantyBtn = document.getElementById('editProductWarrantyBtn');
     const warrantySummaryEdit = document.getElementById('warranty-summary-edit');
+    const saveEditProductBtn = document.getElementById('save-edit-product-btn');
+    const minQuantityInput = document.getElementById('min_quantity');
+    const maxQuantityInput = document.getElementById('max_quantity');
+    const minQuantityError = document.getElementById('min-quantity-error');
+    const maxQuantityError = document.getElementById('max-quantity-error');
+    const maxQuantityStockError = document.getElementById('max-quantity-stock-error');
+    const currentStockInput = document.getElementById('current_stock_quantity');
 
+    if (!minQuantityInput || !maxQuantityInput) {
+        console.warn('⚠️ Campos de quantidade não encontrados');
+        return;
+    }
+
+    // ========================================
+    // VALIDAÇÃO DE QUANTIDADE MÍNIMA E MÁXIMA
+    // ========================================
+    function validateQuantities() {
+        const minQty = parseInt(minQuantityInput.value) || 0;
+        const maxQty = parseInt(maxQuantityInput.value) || 0;
+        let isValid = true;
+
+        console.log('📊 Validando Produto:', { minQty, maxQty });
+
+        // Validar quantidade mínima
+        if (minQty < 1) {
+            minQuantityInput.classList.add('is-invalid');
+            if (minQuantityError) {
+                minQuantityError.textContent = '⚠️ Valor mínimo necessário para salvar: 1';
+                minQuantityError.style.display = 'block';
+            }
+            isValid = false;
+        } else {
+            minQuantityInput.classList.remove('is-invalid');
+            if (minQuantityError) {
+                minQuantityError.textContent = '⚠️ Valor mínimo necessário para salvar: 1';
+                minQuantityError.style.display = 'none';
+            }
+        }
+
+        // Validar quantidade máxima
+        if (maxQty < 1) {
+            maxQuantityInput.classList.add('is-invalid');
+            if (maxQuantityError) maxQuantityError.style.display = 'block';
+            isValid = false;
+        } else {
+            maxQuantityInput.classList.remove('is-invalid');
+            if (maxQuantityError) maxQuantityError.style.display = 'none';
+        }
+
+        // VALIDAÇÃO: min e max não podem ser ambos 1
+        if (minQty === 1 && maxQty === 1) {
+            minQuantityInput.classList.add('is-invalid');
+            maxQuantityInput.classList.add('is-invalid');
+            isValid = false;
+        }
+
+        // VALIDAÇÃO: min não pode ser maior que max
+        if (minQty > maxQty && maxQty > 0) {
+            minQuantityInput.classList.add('is-invalid');
+            maxQuantityInput.classList.add('is-invalid');
+            if (minQuantityError) {
+                minQuantityError.textContent = `⚠️ A quantidade mínima (${minQty}) não pode ser maior que a máxima (${maxQty})`;
+                minQuantityError.style.display = 'block';
+            }
+            isValid = false;
+        }
+
+        // Habilitar/desabilitar botão salvar
+        if (saveEditProductBtn) {
+            saveEditProductBtn.disabled = !isValid;
+            console.log('🔘 Botão Salvar:', isValid ? '✅ HABILITADO' : '❌ DESABILITADO');
+        }
+
+        return isValid;
+    }
+
+    // Adicionar listeners aos campos de quantidade
+    minQuantityInput.addEventListener('input', validateQuantities);
+    minQuantityInput.addEventListener('change', validateQuantities);
+    minQuantityInput.addEventListener('keyup', validateQuantities);
+    
+    maxQuantityInput.addEventListener('input', validateQuantities);
+    maxQuantityInput.addEventListener('change', validateQuantities);
+    maxQuantityInput.addEventListener('keyup', validateQuantities);
+
+    // Checkbox de garantia
     if (hasWarrantyCheckbox) {
         hasWarrantyCheckbox.addEventListener('change', function() {
+            // Obter dados dos campos ocultos
+            const provider = document.getElementById('edit_warranty_provider')?.value || 'Não informado';
+            const periodValue = document.getElementById('edit_warranty_period_value')?.value || '-';
+            const periodUnit = document.getElementById('edit_warranty_period_unit')?.value || 'months';
+            const endDate = document.getElementById('edit_warranty_end_date')?.value;
+            
+            // Mapear unidade de período para português
+            const unitLabels = {
+                'days': 'dias',
+                'months': 'meses',
+                'years': 'anos'
+            };
+            const unitLabel = unitLabels[periodUnit] || periodUnit;
+            
+            // Formatar data final
+            let endDateFormatted = 'Data não definida';
+            if (endDate) {
+                try {
+                    endDateFormatted = new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR');
+                } catch (e) {
+                    endDateFormatted = endDate;
+                }
+            }
+            
             if (this.checked) {
-                editWarrantyBtn.style.display = 'inline-block';
-                warrantySummaryEdit.classList.remove('d-none');
+                // Atualizar resumo com dados dos hidden inputs
+                const summaryProvider = document.getElementById('summary-provider-edit');
+                const summaryPeriod = document.getElementById('summary-period-edit');
+                const summaryEnd = document.getElementById('summary-end-edit');
+                
+                if (summaryProvider) summaryProvider.textContent = provider;
+                if (summaryPeriod) summaryPeriod.textContent = periodValue + ' ' + unitLabel;
+                if (summaryEnd) summaryEnd.textContent = endDateFormatted;
+                
+                // Mostrar elementos
+                if (editWarrantyBtn) editWarrantyBtn.style.display = 'inline-block';
+                if (warrantySummaryEdit) warrantySummaryEdit.classList.remove('d-none');
             } else {
-                editWarrantyBtn.style.display = 'none';
-                warrantySummaryEdit.classList.add('d-none');
+                // Esconder elementos
+                if (editWarrantyBtn) editWarrantyBtn.style.display = 'none';
+                if (warrantySummaryEdit) warrantySummaryEdit.classList.add('d-none');
             }
         });
     }
 
-    // Setup do Upload de Imagem (continua igual)
-    if (typeof setupImageUpload === 'function') {
-        setupImageUpload({
-            formId: 'editProductForm',
-            fileInputId: 'product_image_input',
-            hiddenInputId: 'uploaded_image',
-            previewImageId: 'product-preview-image',
-            placeholderId: 'product-placeholder',
-            previewContainerId: 'product-preview-container',
-            addBtnContainerId: 'product-add-btn-container', 
-            removeBtnId: 'product-remove-btn',
-            uploadAreaId: 'product-upload-area',
-            itemType: 'product',
-            itemId: <?php echo $product_id; ?>
+    // Validar no carregamento
+    setTimeout(() => {
+        validateQuantities();
+        console.log('✅ Validação inicial do produto executada');
+    }, 200);
+
+    // Prevenir submissão se inválido
+    const editProductForm = document.getElementById('editProductForm');
+    if (editProductForm) {
+        editProductForm.addEventListener('submit', function(e) {
+            // Revalidar antes de submeter
+            const currentMinQty = parseInt(document.getElementById('min_quantity').value) || 0;
+            const currentMaxQty = parseInt(document.getElementById('max_quantity').value) || 0;
+
+            if (currentMinQty < 1 || currentMaxQty < 1) {
+                e.preventDefault();
+                alert('⚠️ AVISO: As quantidades mínima e máxima devem ser no mínimo 1.\n\nDefina valores válidos para o controle de estoque antes de salvar.');
+
+                // Scroll para o primeiro campo inválido
+                if (currentMinQty < 1) {
+                    document.getElementById('min_quantity').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else if (currentMaxQty < 1) {
+                    document.getElementById('max_quantity').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                return false;
+            }
+
+            // NOVA VALIDAÇÃO: min e max não podem ser ambos 1
+            if (currentMinQty === 1 && currentMaxQty === 1) {
+                e.preventDefault();
+                alert('⚠️ AVISO: A quantidade mínima e máxima não podem ser ambas 1.\n\nDefina valores diferentes para o controle de estoque.');
+                document.getElementById('min_quantity').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const submitBtnElem = this.querySelector('button[type="submit"]');
+            const originalText = submitBtnElem.innerHTML;
+            submitBtnElem.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Salvando...';
+            submitBtnElem.disabled = true;
+
+            setTimeout(() => {
+                submitBtnElem.innerHTML = originalText;
+                submitBtnElem.disabled = false;
+            }, 5000);
         });
     }
+
+    console.log('✅ Validação do produto inicializada com sucesso');
+}
+
+// ========================================
+// EXECUTAR NO DOM READY E NO LOAD DO MODAL
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM carregado, iniciando validação...');
+    initEditProductValidation();
 });
+
+// Se o formulário já existir (modal carregado dinamicamente)
+if (document.getElementById('editProductForm')) {
+    console.log('🔲 Modal detectado, inicializando imediatamente...');
+    initEditProductValidation();
+}
 
 // Funções de Gerar Código (continuam iguais)
 function generateBarcode() {
@@ -394,4 +628,57 @@ function generateQRCode() {
         showAlert('Código QR gerado.', 'info');
     }
 }
+</script>
+
+<script>
+// ========================================
+// INICIALIZAÇÃO DO MEDIA UPLOAD (COMPATÍVEL COM MODAL)
+// ========================================
+(function() {
+    function initProductMediaUpload() {
+        if (!document.getElementById('product-upload-container')) {
+            return; // Elemento não existe
+        }
+
+        if (typeof MediaUploadManager === 'undefined') {
+            console.log('⏳ MediaUploadManager não carregado, tentando carregar...');
+
+            // Verifica se o script já está na página
+            if (!document.querySelector('script[src*="media-upload.js"]')) {
+                const script = document.createElement('script');
+                script.src = 'js/media-upload.js';
+                script.onload = function() {
+                    console.log('✅ media-upload.js carregado dinamicamente');
+                    initProductMediaUpload(); // Tenta novamente
+                };
+                script.onerror = function() {
+                    console.error('❌ Erro ao carregar media-upload.js');
+                };
+                document.head.appendChild(script);
+            } else {
+                // Script já existe, aguarda um pouco e tenta novamente
+                setTimeout(initProductMediaUpload, 100);
+            }
+            return;
+        }
+
+        // MediaUploadManager existe, inicializa
+        try {
+            const productUploadManager = new MediaUploadManager({
+                containerId: 'product-upload-container',
+                fileInputId: 'media-file-input',
+                cameraInputId: 'media-camera-input',
+                hiddenInputId: 'uploaded_image',
+                itemType: 'product'
+            });
+            window.productUploadManager = productUploadManager;
+            console.log('✅ Media Upload inicializado para produto');
+        } catch (error) {
+            console.error('❌ Erro ao inicializar MediaUploadManager:', error);
+        }
+    }
+
+    // Tenta inicializar imediatamente
+    initProductMediaUpload();
+})();
 </script>

@@ -20,23 +20,23 @@ try {
     $pdo = getConnection();
     
     // Conta total de produtos
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products");
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE is_deleted = FALSE OR is_deleted IS NULL");
     $total_products = $stmt->fetch()['total'];
     
     // Conta produtos por status
-    $stmt = $pdo->query("SELECT status, COUNT(*) as count FROM products GROUP BY status");
+    $stmt = $pdo->query("SELECT status, COUNT(*) as count FROM products WHERE is_deleted = FALSE OR is_deleted IS NULL GROUP BY status");
     $products_by_status = $stmt->fetchAll();
     
     // Conta produtos com estoque baixo usando a coluna min_quantity
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE quantity > 0 AND quantity <= min_quantity AND min_quantity > 0");
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE quantity > 0 AND quantity <= min_quantity AND min_quantity > 0 AND (is_deleted = FALSE OR is_deleted IS NULL)");
     $low_stock_products = $stmt->fetch()['total'];
     
     // Conta produtos sem estoque
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE quantity = 0");
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE quantity = 0 AND (is_deleted = FALSE OR is_deleted IS NULL)");
     $out_of_stock_products = $stmt->fetch()['total'];
     
     // Conta máquinas prontas
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines");
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines WHERE is_deleted = FALSE OR is_deleted IS NULL");
     $total_machines = $stmt->fetch()['total'];
     
     // Conta usuários (apenas para admin)
@@ -47,15 +47,15 @@ try {
     }
     
     // Produtos adicionados recentemente (últimos 7 dias)
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND (is_deleted = FALSE OR is_deleted IS NULL)");
     $recent_products = $stmt->fetch()['total'];
     
     // Últimos produtos adicionados (5 mais recentes)
-    $stmt = $pdo->query("SELECT name, category, created_at FROM products ORDER BY created_at DESC LIMIT 5");
+    $stmt = $pdo->query("SELECT name, category, created_at FROM products WHERE is_deleted = FALSE OR is_deleted IS NULL ORDER BY created_at DESC LIMIT 5");
     $latest_products = $stmt->fetchAll();
     
     // Produtos mais caros
-    $stmt = $pdo->query("SELECT name, price FROM products WHERE price IS NOT NULL ORDER BY price DESC LIMIT 5");
+    $stmt = $pdo->query("SELECT name, price FROM products WHERE price IS NOT NULL AND (is_deleted = FALSE OR is_deleted IS NULL) ORDER BY price DESC LIMIT 5");
     $expensive_products = $stmt->fetchAll();
     
     // ALTERADO: Query para buscar itens vendidos com o valor total da venda
@@ -102,8 +102,9 @@ try {
     $stmt = $pdo->query("
         SELECT name, quantity, min_quantity, max_quantity
         FROM products 
-        WHERE (quantity <= min_quantity AND min_quantity > 0) 
-           OR (quantity >= max_quantity AND max_quantity > 0)
+        WHERE (is_deleted = FALSE OR is_deleted IS NULL)
+          AND ((quantity <= min_quantity AND min_quantity > 0) 
+               OR (quantity >= max_quantity AND max_quantity > 0))
         ORDER BY (quantity - min_quantity)
         LIMIT 10
     ");

@@ -127,12 +127,14 @@ function applyWarrantyTemplate(event, button) {
         notesArea.value = notes;
     }
     
-    // Triggar cálculo de data final
-    const startDateInput = document.querySelector('input[name="warranty_start_date"]');
-    if (startDateInput && startDateInput.value) {
-        startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
-        startDateInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    // Triggar cálculo de data final com delay para garantir
+    setTimeout(() => {
+        const startDateInput = document.querySelector('input[name="warranty_start_date"]');
+        if (startDateInput && startDateInput.value) {
+            startDateInput.dispatchEvent(new Event('input', { bubbles: true }));
+            startDateInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }, 100);
     
     // Feedback visual
     document.querySelectorAll('.template-btn').forEach(btn => {

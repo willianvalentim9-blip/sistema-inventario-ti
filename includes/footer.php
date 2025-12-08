@@ -104,6 +104,7 @@ body.modal-open {
 <script src="js/bootstrap.bundle.min.js"></script>
 <script src="js/custom.js"></script>
 <script src="js/enhanced_ui.js"></script>
+<script src="js/history-modal.js"></script>
 
 <?php if (isset($additional_js)): ?>
     <?php foreach ($additional_js as $js_file): ?>

@@ -1,16 +1,17 @@
 <?php
 // ========================================
-// SCRIPT DE EXCLUSÃO DE MÁQUINA PRONTA (VERSÃO CORRIGIDA COM LOG)
+// SCRIPT DE EXCLUSÃO DE MÁQUINA COM SOFT DELETE
 // ========================================
-// Este script processa a exclusão de uma máquina pronta e registra a ação no log de admin
+// Este script processa a exclusão (soft delete) de uma máquina pronta e registra a ação no log de admin
 
 require_once 'config.php';
+require_once 'includes/machine_components_functions.php';
 
 header('Content-Type: application/json');
 
 // Verifica se o usuário está logado e tem permissão de administrador
 requireLogin();
-if ($_SESSION['user_role'] !== 'admin') {
+if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
     echo json_encode(['success' => false, 'message' => 'Acesso negado. Apenas administradores podem excluir máquinas.']);
     exit;
 }
@@ -23,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $input = json_decode(file_get_contents('php://input'), true);
 $machine_id = intval($input['id'] ?? 0);
+$return_stock = isset($input['return_stock']) ? (bool)$input['return_stock'] : true;
 $pdo = null;
 
 if ($machine_id <= 0) {
@@ -32,42 +34,67 @@ if ($machine_id <= 0) {
 
 try {
     $pdo = getConnection();
-    
+
     // Inicia uma transação
     $pdo->beginTransaction();
 
-    // Primeiro, busca todos os dados da máquina ANTES de deletar, para fins de log
-    $stmt = $pdo->prepare("SELECT * FROM ready_machines WHERE id = ?");
+    // Primeiro, busca todos os dados da máquina ANTES de deletar
+    $stmt = $pdo->prepare("SELECT * FROM ready_machines WHERE id = ? AND is_deleted = FALSE");
     $stmt->execute([$machine_id]);
     $machine_to_delete = $stmt->fetch();
 
     if (!$machine_to_delete) {
-        throw new Exception('Máquina não encontrada.');
+        $pdo->rollBack();
+        echo json_encode(['success' => false, 'message' => 'Máquina não encontrada ou já foi deletada.']);
+        exit;
     }
 
-    $machine_image = $machine_to_delete['image'];
+    // Busca componentes antes de excluir
+    $components = getMachineComponents($pdo, $machine_id);
+    $components_count = count($components);
 
-    // Exclui a máquina do banco de dados
-    $delete_stmt = $pdo->prepare("DELETE FROM ready_machines WHERE id = ?");
-    $delete_stmt->execute([$machine_id]);
+    // Devolve componentes ao estoque se solicitado
+    if ($return_stock && $components_count > 0) {
+        $return_result = returnMachineComponentsToStock($pdo, $machine_id, 'exclusao');
 
-    if ($delete_stmt->rowCount() > 0) {
-        // Se a exclusão do banco de dados foi bem-sucedida, tenta remover o arquivo de imagem
-        if (!empty($machine_image)) {
-            $image_path = 'uploads/machines/' . $machine_image;
-            if (file_exists($image_path)) {
-                unlink($image_path);
-            }
+        if (!$return_result) {
+            $pdo->rollBack();
+            echo json_encode(['success' => false, 'message' => 'Erro ao devolver componentes ao estoque.']);
+            exit;
         }
-        
-        // Registra a ação de exclusão no log de administrador
+
+        logAdminActivity(
+            $_SESSION["user_id"],
+            'RETURN_STOCK',
+            'machine_products',
+            $machine_id,
+            "Devolvidos {$components_count} componentes ao estoque"
+        );
+    }
+
+    // Realiza soft delete (marca como deletada)
+    $result = softDeleteMachine($machine_id, $_SESSION['user_id']);
+
+    if ($result) {
+        // Registra a ação
         logAdminActivity($_SESSION["user_id"], "DELETE", "ready_machines", $machine_id, $machine_to_delete, null);
-        
+
         $pdo->commit();
-        echo json_encode(['success' => true, 'message' => 'Máquina excluída com sucesso.']);
+
+        $message = 'Máquina excluída com sucesso.';
+        if ($return_stock && $components_count > 0) {
+            $message .= " {$components_count} componente(s) devolvido(s) ao estoque.";
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => $message,
+            'deleted_at' => date('Y-m-d H:i:s'),
+            'components_returned' => $return_stock ? $components_count : 0
+        ]);
     } else {
         $pdo->rollBack();
-        echo json_encode(['success' => false, 'message' => 'Máquina não encontrada ou não pôde ser excluída.']);
+        echo json_encode(['success' => false, 'message' => 'Não foi possível excluir a máquina.']);
     }
 
 } catch (PDOException $e) {

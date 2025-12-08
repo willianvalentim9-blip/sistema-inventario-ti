@@ -452,6 +452,92 @@ body {
     text-overflow: ellipsis; /* Adiciona "..." ao final do texto cortado */
 }
 /* ========================================
+   ESTILOS PARA SELEÇÃO DE COMPONENTES (MODAIS)
+   ======================================== */
+.product-selection-item {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-base);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background-color: #fff;
+    transition: all 0.2s ease;
+}
+
+.product-selection-item:hover {
+    box-shadow: var(--box-shadow-base);
+    border-color: var(--primary-color);
+}
+
+.product-selection-item.selected-product-item {
+    background-color: #e7f3ff;
+    border-color: var(--primary-color);
+    border-left: 4px solid var(--primary-color);
+}
+
+.product-selection-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.product-selection-name {
+    flex-grow: 1;
+    margin-right: 1rem;
+}
+
+.product-selection-stock {
+    white-space: nowrap;
+}
+
+.product-selection-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.btn-select-component-product {
+    white-space: nowrap;
+}
+
+.btn-remove-component-product {
+    animation: fadeIn 0.2s ease;
+}
+
+.modal-search-component {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.modal-search-component .form-control {
+    flex-grow: 1;
+}
+
+.products-selection-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Permite scroll da página quando modal está aberto */
+body.modal-open {
+    overflow: auto !important;
+    padding-right: 0 !important;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ========================================
    AJUSTES ESPECÍFICOS PARA RESOLUÇÕES MOBILE
    ======================================== */
 @media (max-width: 768px) {
@@ -497,4 +583,66 @@ body {
         width: min(200px, 50vw);
         height: min(200px, 50vw);
     }
+}
+
+/* ========================================
+   TOOLTIPS NO TEMA ESCURO
+   ======================================== */
+/* Garante que os tooltips tenham texto branco no tema escuro */
+[data-bs-theme="dark"] .tooltip-inner,
+body.dark-mode .tooltip-inner {
+    color: #ffffff !important;
+    background-color: #343a40;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-top .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #343a40 !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-bottom .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #343a40 !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-start .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #343a40 !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-end .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #343a40 !important;
+}
+
+/* ========================================
+   PADRONIZAÇÃO DE BOTÕES PRINCIPAIS
+   ======================================== */
+/* Botões principais: Nova Máquina, Scanner, Exportar Dados, etc */
+.btn-primary-custom,
+.btn-secondary-custom,
+.btn-success-custom {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Classe genérica para botões em toolbar */
+.btn-toolbar .btn:not(.btn-group-sm .btn) {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Botões com ícone */
+.btn-primary-custom i,
+.btn-secondary-custom i,
+.btn-success-custom i,
+.btn-toolbar .btn:not(.btn-group-sm .btn) i {
+    margin: 0 !important;
+    padding: 0 !important;
 }

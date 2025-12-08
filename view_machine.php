@@ -18,7 +18,7 @@ if ($machine_id <= 0) {
 
 try {
     $pdo = getConnection();
-    $stmt = $pdo->prepare("SELECT * FROM ready_machines WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM ready_machines WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
     $stmt->execute([$machine_id]);
     $machine = $stmt->fetch();
     if (!$machine) {

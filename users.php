@@ -125,9 +125,10 @@ try {
     
     // Estatísticas
     $stats_stmt = $pdo->query("
-        SELECT 
+        SELECT
             COUNT(*) as total,
             COUNT(CASE WHEN role = 'admin' THEN 1 END) as admins,
+            COUNT(CASE WHEN role = 'administrativo' THEN 1 END) as administrativos,
             COUNT(CASE WHEN role = 'user' THEN 1 END) as regular_users,
             COUNT(CASE WHEN last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as active_users
         FROM users
@@ -139,7 +140,7 @@ try {
     $users = [];
     $total_users = 0;
     $total_pages = 0;
-    $stats = ['total' => 0, 'admins' => 0, 'regular_users' => 0, 'active_users' => 0];
+    $stats = ['total' => 0, 'admins' => 0, 'administrativos' => 0, 'regular_users' => 0, 'active_users' => 0];
 }
 ?>
 
@@ -187,7 +188,7 @@ if (isset($_SESSION["flash_message"])) {
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card card-custom text-center">
             <div class="card-body">
                 <i class="fas fa-user-shield fa-2x text-warning mb-2"></i>
@@ -196,12 +197,21 @@ if (isset($_SESSION["flash_message"])) {
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
+        <div class="card card-custom text-center">
+            <div class="card-body">
+                <i class="fas fa-user-cog fa-2x text-purple mb-2"></i>
+                <h5 class="card-title"><?php echo number_format($stats['administrativos'] ?? 0); ?></h5>
+                <p class="card-text text-muted">Administrativos</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
         <div class="card card-custom text-center">
             <div class="card-body">
                 <i class="fas fa-user fa-2x text-info mb-2"></i>
                 <h5 class="card-title"><?php echo number_format($stats['regular_users']); ?></h5>
-                <p class="card-text text-muted">Usuários Regulares</p>
+                <p class="card-text text-muted">Usuários</p>
             </div>
         </div>
     </div>
@@ -240,6 +250,7 @@ if (isset($_SESSION["flash_message"])) {
                 <select class="form-select form-control-custom" id="role" name="role">
                     <option value="">Todas</option>
                     <option value="admin" <?php echo $role_filter === 'admin' ? 'selected' : ''; ?>>Administrador</option>
+                    <option value="administrativo" <?php echo $role_filter === 'administrativo' ? 'selected' : ''; ?>>Administrativo</option>
                     <option value="user" <?php echo $role_filter === 'user' ? 'selected' : ''; ?>>Usuário</option>
                 </select>
             </div>
@@ -299,8 +310,20 @@ if (isset($_SESSION["flash_message"])) {
                                 </td>
                                 <td><?php echo htmlspecialchars($user['email']); ?></td>
                                 <td>
-                                    <span class="badge <?php echo $user['role'] === 'admin' ? 'bg-warning text-dark' : 'bg-info'; ?>">
-                                        <?php echo $user['role'] === 'admin' ? 'Administrador' : 'Usuário'; ?>
+                                    <?php
+                                    $badge_class = 'bg-info';
+                                    $role_label = 'Usuário';
+
+                                    if ($user['role'] === 'admin') {
+                                        $badge_class = 'bg-warning text-dark';
+                                        $role_label = 'Administrador';
+                                    } elseif ($user['role'] === 'administrativo') {
+                                        $badge_class = 'bg-purple text-white';
+                                        $role_label = 'Administrativo';
+                                    }
+                                    ?>
+                                    <span class="badge <?php echo $badge_class; ?>">
+                                        <?php echo $role_label; ?>
                                     </span>
                                 </td>
                                 <td>
@@ -386,6 +409,7 @@ if (isset($_SESSION["flash_message"])) {
                         <select class="form-select" id="role" name="role">
                             <option value="user">Usuário</option>
                             <option value="admin">Administrador</option>
+                            <option value="administrativo">Administrativo</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary">Salvar Usuário</button>

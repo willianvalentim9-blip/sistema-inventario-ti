@@ -43,6 +43,13 @@ try {
     $previous_quantity = $product['quantity'];
     $new_quantity = $previous_quantity - $quantity_to_remove;
 
+    // ========================================
+    // VALIDAÇÃO INTELIGENTE DE ESTOQUE MÍNIMO
+    // ========================================
+    $min_quantity = intval($product['min_quantity'] ?? 0);
+    $will_be_below_min = ($new_quantity < $min_quantity && $min_quantity > 0);
+    $warning_message = '';
+
     $update_stmt = $pdo->prepare("UPDATE products SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
     $update_stmt->execute([$new_quantity, $product_id]);
     
@@ -83,8 +90,32 @@ try {
 
     $pdo->commit();
 
+    // ===== NOVO: Verifica estoque baixo após a saída =====
+    $low_stock_alert = checkAndLogLowStock($product_id);
+
+    // ========================================
+    // MENSAGEM INTELIGENTE COM AVISO DE ESTOQUE MÍNIMO
+    // ========================================
+    $success_msg = "Baixa de {$quantity_to_remove} unidade(s) de '{$product['name']}' registrada com sucesso!";
+
+    if ($will_be_below_min) {
+        $warning_message = "⚠️ ATENÇÃO: Estoque ficou abaixo do mínimo configurado!\n\n";
+        $warning_message .= "• Estoque atual: {$new_quantity} unidade(s)\n";
+        $warning_message .= "• Mínimo configurado: {$min_quantity} unidade(s)\n";
+        $warning_message .= "• Diferença: " . ($min_quantity - $new_quantity) . " unidade(s) abaixo do mínimo\n\n";
+        $warning_message .= "📦 Recomendação: Solicitar reposição de estoque.";
+    }
+
     $response['success'] = true;
-    $response['message'] = "Baixa de {$quantity_to_remove} unidade(s) de '{$product['name']}' registrada com sucesso!";
+    $response['message'] = $success_msg;
+    $response['warning'] = $warning_message;
+    $response['stock_info'] = [
+        'current' => $new_quantity,
+        'min' => $min_quantity,
+        'max' => intval($product['max_quantity'] ?? 0),
+        'below_min' => $will_be_below_min
+    ];
+    $response['low_stock_alert'] = $low_stock_alert;
 
 } catch (Exception $e) {
     if (isset($pdo) && $pdo->inTransaction()) {

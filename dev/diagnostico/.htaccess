@@ -1,0 +1,22 @@
+# ========================================
+# PROTEÇÃO OPCIONAL DA PASTA DE DIAGNÓSTICOS
+# ========================================
+
+# Descomente as linhas abaixo para ativar proteção por senha
+# AuthType Basic
+# AuthName "Área de Diagnósticos - Acesso Restrito"
+# AuthUserFile /caminho/completo/.htpasswd
+# Require valid-user
+
+# Permite acesso direto ao index.php
+<Files "index.php">
+    Require all granted
+</Files>
+
+# Bloqueia listagem de diretórios
+Options -Indexes
+
+# Permite apenas GET e POST
+<LimitExcept GET POST>
+    Require all denied
+</LimitExcept>

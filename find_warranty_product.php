@@ -4,7 +4,7 @@ require_once 'config.php';
 $pdo = getConnection();
 
 // Find first product with warranty
-$stmt = $pdo->query("SELECT id, name, warranty_supplier_id FROM products WHERE has_warranty = 1 LIMIT 1");
+$stmt = $pdo->query("SELECT id, name, warranty_supplier_id FROM products WHERE has_warranty = 1 AND (is_deleted = FALSE OR is_deleted IS NULL) LIMIT 1");
 $product = $stmt->fetch();
 
 if ($product) {

@@ -16,6 +16,9 @@ $offset = ($page - 1) * $per_page;
 $where_conditions = [];
 $params = [];
 
+// ===== NOVO: Sempre filtrar itens deletados =====
+$where_conditions[] = "(is_deleted = FALSE OR is_deleted IS NULL)";
+
 if (!empty($search)) {
     // Adiciona a busca por código de barras, qr code e número de série
     $where_conditions[] = "(name LIKE ? OR model LIKE ? OR manufacturer LIKE ? OR description LIKE ? OR barcode = ? OR qr_code = ? OR serial_number = ?)";
@@ -60,7 +63,7 @@ try {
     $stmt->execute($params);
     $products = $stmt->fetchAll();
     
-    $categories_stmt = $pdo->query("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category");
+    $categories_stmt = $pdo->query("SELECT DISTINCT category FROM products WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND category IS NOT NULL AND category != '' ORDER BY category");
     $categories = $categories_stmt->fetchAll();
     
 } catch (PDOException $e) {
@@ -91,8 +94,14 @@ if (isset($_SESSION["flash_message"])) {
             <a href="add_product.php" class="btn btn-sm btn-primary-custom"><i class="fas fa-plus me-1"></i> Novo Produto</a>
         </div>
 
-        <div class="btn-group">
+        <div class="btn-group me-2">
             <a href="scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
+                <i class="fas fa-download me-1"></i> Exportar Dados
+            </button>
         </div>
     </div>
 </div>
@@ -103,7 +112,7 @@ if (isset($_SESSION["flash_message"])) {
         <form method="GET" action="" class="row g-3">
             <div class="col-md-4">
                 <label for="search" class="form-label form-label-custom"><i class="fas fa-search me-1"></i> Buscar</label>
-                <input type="text" class="form-control form-control-custom" id="search" name="search" placeholder="Nome, modelo, código de barras..." value="<?php echo htmlspecialchars($search); ?>">
+                <input type="text" class="form-control form-control-custom" id="search" name="search" placeholder="Produto, fabricante, modelo, código de barras, série..." value="<?php echo htmlspecialchars($search); ?>">
             </div>
             <div class="col-md-3"><label for="category" class="form-label form-label-custom"><i class="fas fa-folder me-1"></i> Categoria</label><select class="form-select form-control-custom" id="category" name="category"><option value="">Todas</option><?php foreach ($categories as $cat): ?><option value="<?php echo htmlspecialchars($cat['category']); ?>" <?php echo $category_filter === $cat['category'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cat['category']); ?></option><?php endforeach; ?></select></div>
             <div class="col-md-3"><label for="status" class="form-label form-label-custom"><i class="fas fa-flag me-1"></i> Status</label><select class="form-select form-control-custom" id="status" name="status"><option value="">Todos</option><option value="available" <?php echo $status_filter === 'available' ? 'selected' : ''; ?>>Disponível</option><option value="in_use" <?php echo $status_filter === 'in_use' ? 'selected' : ''; ?>>Em Uso</option><option value="defective" <?php echo $status_filter === 'defective' ? 'selected' : ''; ?>>Defeituoso</option><option value="maintenance" <?php echo $status_filter === 'maintenance' ? 'selected' : ''; ?>>Manutenção</option></select></div>
@@ -159,6 +168,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                     <button type="button" class="btn btn-outline-success" onclick="openStockInModal(<?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>', <?php echo $product['quantity']; ?>, <?php echo $product['max_quantity'] ?? 0; ?>)" data-bs-toggle="tooltip" title="Dar Entrada"><i class="fas fa-plus-circle"></i></button>
                     <button type="button" class="btn btn-outline-warning" onclick="openStockOutModal('product', <?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>', <?php echo $product['quantity']; ?>)" data-bs-toggle="tooltip" title="Dar Baixa"><i class="fas fa-minus-circle"></i></button>
                     <button type="button" class="btn btn-outline-danger" onclick="openDeleteModal('product', <?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>')" data-bs-toggle="tooltip" title="Excluir"><i class="fas fa-trash"></i></button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="openHistoryModal('product_history_view.php?id=<?php echo $product['id']; ?>&modal=true', 'Histórico: <?php echo htmlspecialchars(addslashes($product['name'])); ?>')" data-bs-toggle="tooltip" title="Ver Histórico"><i class="fas fa-history"></i></button>
                 </div></td>
             </tr>
         <?php endforeach; ?>
@@ -170,24 +180,116 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
 <?php endif; ?>
 
 <?php if ($view_mode === 'cards'): ?>
-    <?php if (!empty($products)): ?><div class="row">
+    <?php if (!empty($products)): ?>
+        <div class="row g-3">
         <?php foreach ($products as $product): ?>
-            <div class="col-xl-2 col-lg-2 col-md-6 mb-4"><div class="card card-custom h-100 product-card">
-                <?php if (!empty($product['image'])): ?><img src="uploads/products/<?php echo htmlspecialchars($product['image']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['name']); ?>" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="product-icon-placeholder" style="display: none; height: 300px; align-items: center; justify-content: center;"><i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-4x text-muted"></i></div><?php else: ?><div class="product-icon-placeholder d-flex align-items-center justify-content-center"><i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-4x text-muted"></i></div><?php endif; ?>
-                <div class="card-body d-flex flex-column"><div class="d-flex justify-content-between align-items-start mb-2"><span class="badge bg-light text-dark"><?php echo htmlspecialchars($product['category']); ?></span><span class="badge <?php echo getStatusBadgeClass($product['status']); ?>"><?php echo getStatusText($product['status']); ?></span></div><h6 class="card-title text-primary-custom mb-1"><?php echo htmlspecialchars($product['name']); ?></h6><?php if (!empty($product['model'])): ?><p class="text-muted small mb-2"><?php echo htmlspecialchars($product['model']); ?></p><?php endif; ?><div class="mt-auto"><div class="d-flex justify-content-between align-items-center mt-2"><div><small class="text-muted">Estoque:</small><br>
-                <span class="badge <?php echo getQuantityBadgeClass($product['quantity'], $product['min_quantity']); ?>"><?php echo $product['quantity']; ?></span>
-                </div><?php if ($product['price'] > 0): ?><div><small class="text-muted">Preço:</small><br><strong class="text-success">R$ <?php echo number_format($product['price'], 2, ',', '.'); ?></strong></div><?php endif; ?></div></div></div>
-                <div class="card-footer bg-transparent"><div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="openActionModal('view_product.php?id=<?php echo $product['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($product['name'])); ?>')" title="Visualizar"><i class="fas fa-eye"></i></button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="openActionModal('edit_product.php?id=<?php echo $product['id']; ?>&modal=true', 'Editar: <?php echo htmlspecialchars(addslashes($product['name'])); ?>')" title="Editar"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn btn-outline-success btn-sm" onclick="openStockInModal(<?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>', <?php echo $product['quantity']; ?>, <?php echo $product['max_quantity'] ?? 0; ?>)" title="Dar Entrada"><i class="fas fa-plus-circle"></i></button>
-                    <a href="barcode_print.php?product_id=<?php echo $product['id']; ?>" class="btn btn-outline-info btn-sm" target="_blank" title="Código de Barras"><i class="fas fa-barcode"></i></a>
-                    <button type="button" class="btn btn-outline-warning btn-sm" onclick="openStockOutModal('product', <?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>', <?php echo $product['quantity']; ?>)" title="Dar Baixa"><i class="fas fa-minus-circle"></i></button>
-                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="openDeleteModal('product', <?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>')" title="Excluir"><i class="fas fa-trash"></i></button>
-                </div></div>
-            </div></div>
+            <div class="col-xl-3 col-lg-4 col-md-6">
+                <div class="card card-custom h-100 product-card shadow-sm border-0">
+                    <!-- Imagem/Ícone -->
+                    <div class="card-img-container position-relative">
+                        <?php if (!empty($product['image'])): ?>
+                            <img src="uploads/products/<?php echo htmlspecialchars($product['image']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['name']); ?>" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="product-icon-placeholder" style="display: none; height: 180px; align-items: center; justify-content: center;">
+                                <i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-3x text-muted"></i>
+                            </div>
+                        <?php else: ?>
+                            <div class="product-icon-placeholder d-flex align-items-center justify-content-center" style="height: 180px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
+                                <i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-3x text-white opacity-75"></i>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Badges no topo -->
+                        <div class="position-absolute top-0 start-0 w-100 p-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <span class="badge bg-white text-dark shadow-sm">
+                                    <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($product['category']); ?>
+                                </span>
+                                <span class="badge <?php echo getStatusBadgeClass($product['status']); ?> shadow-sm">
+                                    <?php echo getStatusText($product['status']); ?>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Corpo do Card -->
+                    <div class="card-body p-3">
+                        <!-- Nome -->
+                        <h6 class="card-title text-primary-custom mb-2 fw-bold" style="min-height: 40px;">
+                            <?php echo htmlspecialchars($product['name']); ?>
+                        </h6>
+
+                        <!-- Detalhes -->
+                        <div class="product-details small mb-3">
+                            <?php if (!empty($product['model'])): ?>
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="fas fa-cube text-muted me-2" style="width: 14px;"></i>
+                                    <strong class="me-1">Modelo:</strong>
+                                    <span class="text-muted"><?php echo htmlspecialchars($product['model']); ?></span>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($product['manufacturer'])): ?>
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="fas fa-industry text-muted me-2" style="width: 14px;"></i>
+                                    <strong class="me-1">Fabricante:</strong>
+                                    <span class="text-muted"><?php echo htmlspecialchars($product['manufacturer']); ?></span>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($product['serial_number'])): ?>
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="fas fa-barcode text-muted me-2" style="width: 14px;"></i>
+                                    <strong class="me-1">N° Série:</strong>
+                                    <span class="text-muted small"><?php echo htmlspecialchars($product['serial_number']); ?></span>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Estoque e Preço -->
+                        <div class="d-flex justify-content-between align-items-center mb-2 py-2 border-top border-bottom">
+                            <div>
+                                <small class="text-muted d-block">Estoque</small>
+                                <span class="badge <?php echo getQuantityBadgeClass($product['quantity'], $product['min_quantity']); ?> fs-6">
+                                    <?php echo $product['quantity']; ?> un
+                                </span>
+                            </div>
+                            <?php if ($product['price'] > 0): ?>
+                            <div class="text-end">
+                                <small class="text-muted d-block">Preço</small>
+                                <strong class="text-success">R$ <?php echo number_format($product['price'], 2, ',', '.'); ?></strong>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <!-- Footer com Ações -->
+                    <div class="card-footer bg-light border-0 p-2">
+                        <div class="btn-group btn-group-sm w-100" role="group">
+                            <button type="button" class="btn btn-outline-primary" onclick="openActionModal('view_product.php?id=<?php echo $product['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($product['name'])); ?>')" data-bs-toggle="tooltip" title="Visualizar">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="openActionModal('edit_product.php?id=<?php echo $product['id']; ?>&modal=true', 'Editar: <?php echo htmlspecialchars(addslashes($product['name'])); ?>')" data-bs-toggle="tooltip" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-success" onclick="openStockInModal(<?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>', <?php echo $product['quantity']; ?>, <?php echo $product['max_quantity'] ?? 0; ?>)" data-bs-toggle="tooltip" title="Entrada">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" onclick="openStockOutModal('product', <?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>', <?php echo $product['quantity']; ?>)" data-bs-toggle="tooltip" title="Baixa">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" onclick="openDeleteModal('product', <?php echo $product['id']; ?>, '<?php echo htmlspecialchars(addslashes($product['name'])); ?>')" data-bs-toggle="tooltip" title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="openHistoryModal('product_history_view.php?id=<?php echo $product['id']; ?>&modal=true', 'Histórico: <?php echo htmlspecialchars(addslashes($product['name'])); ?>')" data-bs-toggle="tooltip" title="Histórico">
+                                <i class="fas fa-history"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         <?php endforeach; ?>
-    </div><?php else: ?><div class="text-center py-5"><i class="fas fa-box-open fa-3x text-muted mb-3"></i><h5 class="text-muted">Nenhum produto encontrado</h5><p class="text-muted">Tente uma busca diferente ou adicione novos produtos.</p><a href="add_product.php" class="btn btn-primary-custom"><i class="fas fa-plus me-1"></i> Adicionar Produto</a></div><?php endif; ?>
+        </div>
+<?php else: ?><div class="text-center py-5"><i class="fas fa-box-open fa-3x text-muted mb-3"></i><h5 class="text-muted">Nenhum produto encontrado</h5><p class="text-muted">Tente uma busca diferente ou adicione novos produtos.</p><a href="add_product.php" class="btn btn-primary-custom"><i class="fas fa-plus me-1"></i> Adicionar Produto</a></div><?php endif; ?>
 <?php endif; ?>
 
 <?php if ($total_pages > 1): ?>
@@ -205,5 +307,142 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
         <?php endif; ?>
     </ul></nav>
 <?php endif; ?>
+
+<!-- Modal de Exportação -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-file-download me-2"></i> Exportar Dados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p class="text-muted mb-4">Selecione o tipo de dados que deseja exportar em formato CSV:</p>
+                
+                <!-- Produtos -->
+                <div class="card border-success cursor-pointer export-card" onclick="downloadExport('products')">
+                    <div class="card-body text-center">
+                        <i class="fas fa-box fa-3x text-success mb-2"></i>
+                        <h6 class="card-title mt-2">Todos os Produtos</h6>
+                        <p class="card-text small text-muted mb-2">
+                            Exporta: ID, Nome, Categoria, Fabricante, Modelo, Série, Código de Barras, Quantidade, Preço, Status, Garantia e mais
+                        </p>
+                        <small class="text-muted d-block">
+                            📊 <?php 
+                            try {
+                                $stmt = $pdo->query("SELECT COUNT(*) as total FROM products");
+                                $count = $stmt->fetch()['total'];
+                                echo "$count registros";
+                            } catch (Exception $e) {
+                                echo "- registros";
+                            }
+                            ?>
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-4 mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Formato:</strong> CSV (Excel compatível) • <strong>Encoding:</strong> UTF-8 • <strong>Separador:</strong> Ponto e vírgula (;)
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Função para download de exportação
+function downloadExport(type) {
+    const url = `export_warranties_csv.php?type=${type}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.click();
+    
+    // Fechar modal após clique
+    const modal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+
+// Estilo para cards de exportação
+const style = document.createElement('style');
+style.innerHTML = `
+    .export-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .export-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .export-card i {
+        transition: all 0.3s ease;
+    }
+    
+    .export-card:hover i {
+        transform: scale(1.1);
+    }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+`;
+if (document.head) {
+    document.head.appendChild(style);
+}
+
+// ========================================
+// BUSCA AUTOMÁTICA AO DIGITAR (sem precisar clicar em Filtrar)
+// ========================================
+const searchInput = document.getElementById('search');
+if (searchInput) {
+    searchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const productRows = document.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+
+        productRows.forEach(row => {
+            // Pega o texto de todas as células da linha
+            const rowText = row.textContent.toLowerCase();
+
+            // Se o texto da linha contém o termo de busca, mostra; senão, esconde
+            if (rowText.includes(searchTerm)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Mostra mensagem se nenhum produto encontrado
+        const noResults = document.getElementById('no-results-message');
+        if (noResults) {
+            noResults.remove();
+        }
+
+        if (visibleCount === 0 && searchTerm !== '') {
+            const tbody = document.querySelector('tbody');
+            if (tbody) {
+                const tr = document.createElement('tr');
+                tr.id = 'no-results-message';
+                tr.innerHTML = `
+                    <td colspan="100%" class="text-center py-4">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">Nenhum produto encontrado para "${searchTerm}"</h5>
+                        <p class="text-muted">Tente buscar por outro termo</p>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+    });
+}
+</script>
 
 <?php include 'includes/footer.php'; ?>

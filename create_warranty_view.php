@@ -25,7 +25,7 @@ SELECT
         ELSE 4
     END as alert_level
 FROM products p
-WHERE p.has_warranty = 1
+WHERE p.has_warranty = 1 AND (p.is_deleted = FALSE OR p.is_deleted IS NULL)
 ";
 
 try {

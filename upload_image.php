@@ -104,10 +104,16 @@ try {
     }
     
     $file = $_FILES['image'];
-    $itemType = $_POST['type'] ?? 'product'; // 'product' ou 'machine'
-    
+    $itemType = $_POST['type'] ?? 'product'; // 'product', 'machine' ou 'warehouse'
+
     // Define o diretório de destino com base no tipo
-    $upload_dir = __DIR__ . '/uploads/' . ($itemType === 'machine' ? 'machines/' : 'products/');
+    if ($itemType === 'machine') {
+        $upload_dir = __DIR__ . '/uploads/machines/';
+    } elseif ($itemType === 'warehouse') {
+        $upload_dir = __DIR__ . '/uploads/warehouse/';
+    } else {
+        $upload_dir = __DIR__ . '/uploads/products/';
+    }
 
     // Validações de segurança do arquivo
     $max_file_size = 10 * 1024 * 1024; // 10MB
@@ -122,6 +128,62 @@ try {
     }
     if (getimagesize($file['tmp_name']) === false) {
         throw new Exception('O arquivo enviado não é uma imagem válida.');
+    }
+
+    // ========================================
+    // VALIDAÇÃO MIME TYPE (Segurança Crítica)
+    // ========================================
+    // Verifica se a extensão fileinfo está disponível
+    if (!extension_loaded('fileinfo')) {
+        error_log('AVISO: Extensão fileinfo não está disponível. Validação MIME desabilitada.');
+    } else {
+        // Obtém o MIME type real do arquivo
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo === false) {
+            throw new Exception('Erro ao inicializar verificação de tipo MIME.');
+        }
+
+        $detected_mime = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+
+        // Lista de MIME types permitidos para imagens
+        $allowed_mimes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/pjpeg',  // JPEG progressivo
+            'image/png',
+            'image/gif',
+            'image/webp'
+        ];
+
+        // Verifica se o MIME type detectado está na lista de permitidos
+        if (!in_array($detected_mime, $allowed_mimes)) {
+            error_log("Upload bloqueado: MIME type '{$detected_mime}' não permitido. Arquivo: {$file['name']}");
+            throw new Exception(
+                "Tipo de arquivo não permitido. Detectado: {$detected_mime}. " .
+                "Apenas imagens reais são aceitas (JPG, PNG, GIF, WebP)."
+            );
+        }
+
+        // Validação adicional: verifica se extensão corresponde ao MIME type
+        $mime_to_extension = [
+            'image/jpeg' => ['jpg', 'jpeg'],
+            'image/jpg' => ['jpg', 'jpeg'],
+            'image/pjpeg' => ['jpg', 'jpeg'],
+            'image/png' => ['png'],
+            'image/gif' => ['gif'],
+            'image/webp' => ['webp']
+        ];
+
+        if (isset($mime_to_extension[$detected_mime])) {
+            if (!in_array($file_extension, $mime_to_extension[$detected_mime])) {
+                error_log("Upload bloqueado: Extensão '{$file_extension}' não corresponde ao MIME '{$detected_mime}'. Arquivo: {$file['name']}");
+                throw new Exception(
+                    'A extensão do arquivo não corresponde ao tipo real. ' .
+                    'Possível tentativa de upload de arquivo malicioso.'
+                );
+            }
+        }
     }
 
     // Cria o diretório se ele não existir

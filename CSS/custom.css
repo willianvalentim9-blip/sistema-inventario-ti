@@ -305,3 +305,65 @@ body {
         transform: translateX(0);
     }
 }
+
+/* ========================================
+   TOOLTIPS NO TEMA ESCURO
+   ======================================== */
+/* Garante que os tooltips tenham texto branco no tema escuro */
+[data-bs-theme="dark"] .tooltip-inner,
+body.dark-mode .tooltip-inner {
+    color: #ffffff !important;
+    background-color: #343a40;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-top .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #343a40 !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-bottom .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #343a40 !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-start .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #343a40 !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-end .tooltip-arrow::before,
+body.dark-mode .bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #343a40 !important;
+}
+
+/* ========================================
+   PADRONIZAÇÃO DE BOTÕES PRINCIPAIS
+   ======================================== */
+/* Botões principais: Nova Máquina, Scanner, Exportar Dados, etc */
+.btn-primary-custom,
+.btn-secondary-custom,
+.btn-success-custom {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Classe genérica para botões em toolbar */
+.btn-toolbar .btn:not(.btn-group-sm .btn) {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Botões com ícone */
+.btn-primary-custom i,
+.btn-secondary-custom i,
+.btn-success-custom i,
+.btn-toolbar .btn:not(.btn-group-sm .btn) i {
+    margin: 0 !important;
+    padding: 0 !important;
+}

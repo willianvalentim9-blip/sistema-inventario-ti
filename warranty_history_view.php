@@ -19,40 +19,62 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Obter ID do produto
-$product_id = intval($_GET['id'] ?? $_POST['id'] ?? 0);
+// Obter ID e tipo
+$id = intval($_GET['id'] ?? $_POST['id'] ?? 0);
+$type = trim($_GET['type'] ?? $_POST['type'] ?? 'product'); // product, machine, warehouse
+
+// Validar tipo
+if (!in_array($type, ['product', 'machine', 'warehouse'])) {
+    $type = 'product';
+}
 
 // Verificar se é modal
 $is_modal = isset($_GET['modal']) && $_GET['modal'] === 'true';
 
-if ($product_id <= 0) {
+if ($id <= 0) {
     if ($is_modal) {
         http_response_code(400);
-        exit('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> ID de produto inválido</div>');
+        exit('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> ID inválido</div>');
     }
     http_response_code(400);
-    exit('Produto inválido');
+    exit('ID inválido');
 }
 
 try {
     $pdo = getConnection();
     
-    // Obter dados do produto
-    $stmt = $pdo->prepare("SELECT id, name FROM products WHERE id = ?");
-    $stmt->execute([$product_id]);
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Mapear tipo para tabela e nome
+    $type_map = [
+        'product' => ['table' => 'products', 'label' => 'Produto'],
+        'machine' => ['table' => 'ready_machines', 'label' => 'Máquina'],
+        'warehouse' => ['table' => 'warehouse', 'label' => 'Item do Armazém']
+    ];
+    
+    $table = $type_map[$type]['table'];
+    $type_label = $type_map[$type]['label'];
+    
+    // Obter dados do item - usar query separada para evitar SQL injection
+    if ($type === 'warehouse') {
+        $stmt = $pdo->prepare("SELECT id, name FROM warehouse WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
+    } elseif ($type === 'machine') {
+        $stmt = $pdo->prepare("SELECT id, name FROM ready_machines WHERE id = ?");
+    } else {
+        $stmt = $pdo->prepare("SELECT id, name FROM products WHERE id = ?");
+    }
+    $stmt->execute([$id]);
+    $item = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$product) {
+    if (!$item) {
         if ($is_modal) {
             http_response_code(404);
-            exit('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Produto não encontrado</div>');
+            exit('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> ' . htmlspecialchars($type_label) . ' não encontrado</div>');
         }
         http_response_code(404);
-        exit('Produto não encontrado');
+        exit($type_label . ' não encontrado');
     }
 
     // Obter histórico
-    $history = getWarrantyHistory($pdo, $product_id, 100);
+    $history = getWarrantyHistory($pdo, $id, 100, $type);
 
 } catch (Exception $e) {
     error_log("Erro ao carregar histórico: " . $e->getMessage());
@@ -71,14 +93,14 @@ if (!$is_modal) {
 <div class="row mb-3">
     <div class="col-12">
         <h5 class="mb-3">
-            <i class="fas fa-history"></i> Histórico de Alterações - <?php echo htmlspecialchars($product['name']); ?>
+            <i class="fas fa-history"></i> Histórico de Alterações - <?php echo htmlspecialchars($item['name']); ?>
         </h5>
     </div>
 </div>
 
 <?php if (empty($history)): ?>
     <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> Nenhuma alteração registrada para este produto
+        <i class="fas fa-info-circle"></i> Nenhuma alteração registrada para este <?php echo strtolower($type_label); ?>
     </div>
 <?php else: ?>
     <div class="warranty-history-timeline">

@@ -136,13 +136,19 @@ function logMachineSold($machine_id, $machine_name) {
 /**
  * Registra uma nova entrada de produto na tabela de logs de entrada.
  */
-function logProductInput($product_id, $user_id, $quantity_added, $reason, $details, $product_name, $product_category, $product_serial_number, $product_barcode, $unit_price = null) {
+function logProductInput($product_id, $user_id, $quantity_added, $reason, $details, $product_name, $product_category, $product_serial_number, $product_barcode, $unit_price = null, $type = 'product') {
     try {
         $pdo = getConnection();
-        $stmt = $pdo->prepare("INSERT INTO product_inputs (product_id, user_id, quantity_added, reason, details, product_name, product_category, product_serial_number, product_barcode, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        
+        if ($type === 'warehouse') {
+            $stmt = $pdo->prepare("INSERT INTO warehouse_inputs (warehouse_id, user_id, quantity_added, reason, details, warehouse_name, warehouse_category, warehouse_serial_number, warehouse_barcode, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO product_inputs (product_id, user_id, quantity_added, reason, details, product_name, product_category, product_serial_number, product_barcode, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        }
+        
         $stmt->execute([$product_id, $user_id, $quantity_added, $reason, $details, $product_name, $product_category, $product_serial_number, $product_barcode, $unit_price]);
     } catch (PDOException $e) {
-        error_log("Erro ao registrar entrada de produto: " . $e->getMessage());
+        error_log("Erro ao registrar entrada: " . $e->getMessage());
     }
 }
 

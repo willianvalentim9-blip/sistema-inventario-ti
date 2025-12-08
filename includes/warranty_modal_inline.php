@@ -36,21 +36,11 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
                 <!-- ALERTA DE AVISO -->
                 <div class="alert alert-info mb-3">
                     <i class="fas fa-info-circle me-2"></i>
-                    <strong>Dica:</strong> Configure aqui os dados básicos da garantia. Depois, acesse a aba <strong>Garantias</strong> para detalhes completos.
+                    <strong>Dica:</strong> Configure aqui os dados básicos. Para gerenciar detalhes completos (cliente, ticket, etc), acesse a aba <strong>Garantias</strong>.
                 </div>
 
-                <!-- TOGGLE GARANTIA -->
-                <div class="form-check form-switch mb-4 p-3 bg-light rounded">
-                    <input class="form-check-input warranty-toggle" type="checkbox" id="product_has_warranty" 
-                           data-modal-field="true" style="width: 3em; height: 1.5em;">
-                    <label class="form-check-label ms-2" for="product_has_warranty">
-                        <strong>Este produto possui garantia?</strong>
-                    </label>
-                    <small class="d-block text-muted mt-1 ms-5">Ative para adicionar dados de garantia</small>
-                </div>
-
-                <!-- CONTEÚDO DE GARANTIA (OCULTO INICIALMENTE) -->
-                <div id="warranty-content-product" class="warranty-details-section d-none">
+                <!-- CONTEÚDO DE GARANTIA -->
+                <div id="warranty-content-product" class="warranty-details-section">
                     
                     <!-- SEÇÃO 1: INFORMAÇÕES BÁSICAS -->
                     <div class="warranty-section mb-4">
@@ -143,7 +133,7 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
                     <div class="alert alert-light border border-info mb-0">
                         <small class="text-muted">
                             <i class="fas fa-lightbulb me-1 text-warning"></i>
-                            <strong>Nota:</strong> Essas informações básicas serão sincronizadas. Para gerenciar detalhes completos (cliente, ticket, etc), acesse a aba <strong>Garantias</strong> após criar/salvar o produto.
+                            <strong>Nota:</strong> As informações de garantia serão salvas junto com o produto.
                         </small>
                     </div>
                 </div>
@@ -172,12 +162,11 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
     // ========================================
     // CONFIGURAÇÃO INICIAL
     // ========================================
-    
-    const warrantyToggle = document.getElementById('product_has_warranty');
+
     const warrantyContent = document.getElementById('warranty-content-product');
     const warrantyModal = document.getElementById('warrantyModalProduct');
 
-    // Se houver um formulário de produto, linkamos o checkbox de garantia
+    // Checkbox de garantia do formulário principal
     const productHasWarrantyCheckbox = document.getElementById('has_warranty');
 
     // ========================================
@@ -203,15 +192,6 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
                 formField.value = modalField.value;
             }
         });
-
-        // Se a garantia está ativada no modal, ativa no formulário também
-        if (warrantyToggle.checked && productHasWarrantyCheckbox) {
-            productHasWarrantyCheckbox.checked = true;
-            
-            // Simula o evento de mudança para mostrar os detalhes
-            const event = new Event('change', { bubbles: true });
-            productHasWarrantyCheckbox.dispatchEvent(event);
-        }
 
         // Fecha o modal
         const modal = bootstrap.Modal.getInstance(warrantyModal);
@@ -262,17 +242,6 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
     // EVENT LISTENERS
     // ========================================
 
-    // Toggle de garantia
-    if (warrantyToggle) {
-        warrantyToggle.addEventListener('change', function() {
-            if (this.checked) {
-                warrantyContent.classList.remove('d-none');
-            } else {
-                warrantyContent.classList.add('d-none');
-            }
-        });
-    }
-
     // Cálculo automático de data final
     const startDateField = document.getElementById('product_warranty_start_date');
     const periodValueField = document.getElementById('product_warranty_period_value');
@@ -282,21 +251,6 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
         startDateField.addEventListener('change', calculateEndDate);
         periodValueField?.addEventListener('input', calculateEndDate);
         periodUnitField?.addEventListener('change', calculateEndDate);
-    }
-
-    // ========================================
-    // SINCRONIZAÇÃO COM CHECKBOX PRINCIPAL
-    // ========================================
-    if (productHasWarrantyCheckbox) {
-        productHasWarrantyCheckbox.addEventListener('change', function() {
-            warrantyToggle.checked = this.checked;
-            
-            if (this.checked) {
-                warrantyContent.classList.remove('d-none');
-            } else {
-                warrantyContent.classList.add('d-none');
-            }
-        });
     }
 
     // Se o modal for aberto e houver dados no formulário, carrega no modal
@@ -315,22 +269,14 @@ if (!isset($GLOBALS['is_inside_product_form'])) {
             fields.forEach(field => {
                 const formField = document.querySelector(`[name="${field}"]`);
                 const modalField = document.getElementById('product_' + field);
-                
+
                 if (formField && modalField) {
                     modalField.value = formField.value;
                 }
             });
 
-            // Sincroniza o toggle
-            if (productHasWarrantyCheckbox) {
-                warrantyToggle.checked = productHasWarrantyCheckbox.checked;
-                
-                if (productHasWarrantyCheckbox.checked) {
-                    warrantyContent.classList.remove('d-none');
-                } else {
-                    warrantyContent.classList.add('d-none');
-                }
-            }
+            // Pequeno delay para garantir que os campos estão prontos
+            setTimeout(calculateEndDate, 100);
         });
     }
 })();

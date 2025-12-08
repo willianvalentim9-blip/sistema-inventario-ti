@@ -101,21 +101,76 @@
 }
 
 /* ========================================
+   CORREÇÃO DE BADGES E CARDS NO TEMA ESCURO
+   ======================================== */
+
+/* Badges com fundo claro - ficam ilegíveis em tema escuro */
+.theme-dark_blue .badge.bg-light {
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-body-color) !important;
+    border: 1px solid var(--bs-border-color);
+}
+
+/* Badges de aviso (warning) - ajustar contraste */
+.theme-dark_blue .badge.bg-warning {
+    background-color: #f59e0b !important;
+    color: #1f2937 !important; /* Texto escuro para contraste */
+}
+
+/* Badges informativos (info) - ajustar contraste */
+.theme-dark_blue .badge.bg-info {
+    background-color: #0ea5e9 !important;
+    color: #1f2937 !important; /* Texto escuro para contraste */
+}
+
+/* Card footers com fundo claro */
+.theme-dark_blue .card-footer {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
+    border-top-color: var(--bs-border-color) !important;
+}
+
+/* Texto muted (desbotado) - melhorar legibilidade */
+.theme-dark_blue .text-muted {
+    color: var(--bs-secondary-color) !important;
+}
+
+/* Corrigir bg-light em geral (não apenas badges) */
+.theme-dark_blue .bg-light {
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* ========================================
    ESTILOS PARA FORMULÁRIOS E MODAIS
    ======================================== */
 
-.theme-dark_blue .form-control, 
+.theme-dark_blue .form-control,
 .theme-dark_blue .form-select {
     background-color: #374151;
     color: #f9fafb;
     border-color: #4b5563;
 }
 
-.theme-dark_blue .form-control:focus, 
+.theme-dark_blue .form-control:focus,
 .theme-dark_blue .form-select:focus {
     background-color: #374151;
     color: #f9fafb;
     border-color: var(--primary-color);
+}
+
+/* Labels de formulário - CORREÇÃO MODO ESCURO */
+.theme-dark_blue .form-label,
+.theme-dark_blue .form-label-custom,
+.theme-dark_blue label {
+    color: #e5e7eb !important;
+}
+
+/* Placeholders em inputs */
+.theme-dark_blue .form-control::placeholder,
+.theme-dark_blue .form-select::placeholder {
+    color: #9ca3af;
+    opacity: 1;
 }
 
 .theme-dark_blue .modal-content {
@@ -129,6 +184,228 @@
     border-color: var(--bs-border-color);
 }
 
+/* Títulos dentro de modais */
+.theme-dark_blue .modal-title,
+.theme-dark_blue .modal-body h5,
+.theme-dark_blue .modal-body h6 {
+    color: #f9fafb !important;
+}
+
+/* Ícones dentro de modais */
+.theme-dark_blue .modal-body i {
+    color: var(--primary-light) !important;
+}
+
 .theme-dark_blue .btn-close {
     filter: invert(1) grayscale(100) brightness(200%);
+}
+
+/* ========================================
+   CORREÇÃO PARA PÁGINA DE GARANTIAS
+   ======================================== */
+
+/* Ícones nos labels dos filtros */
+.theme-dark_blue .form-label i,
+.theme-dark_blue .form-label-custom i {
+    color: var(--primary-light) !important;
+}
+
+/* Títulos e headings */
+.theme-dark_blue h1, .theme-dark_blue h2, .theme-dark_blue h3,
+.theme-dark_blue h4, .theme-dark_blue h5, .theme-dark_blue h6 {
+    color: var(--bs-heading-color) !important;
+}
+
+.theme-dark_blue .h2, .theme-dark_blue .h3, .theme-dark_blue .h4 {
+    color: var(--bs-heading-color) !important;
+}
+
+/* Texto em cards e divs */
+.theme-dark_blue .card-body,
+.theme-dark_blue .card-text {
+    color: var(--bs-body-color) !important;
+}
+
+/* Cabeçalho de cards customizados */
+.theme-dark_blue .text-primary-custom {
+    color: var(--primary-light) !important;
+}
+
+/* Links em modo escuro */
+.theme-dark_blue a:not(.btn):not(.nav-link):not(.dropdown-item) {
+    color: var(--primary-light);
+}
+
+.theme-dark_blue a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
+    color: #93c5fd;
+}
+
+/* Tabs de navegação */
+.theme-dark_blue .nav-tabs {
+    border-bottom-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .nav-tabs .nav-link,
+.theme-dark_blue .nav-tabs a.nav-link,
+.theme-dark_blue .nav-tabs .nav-link * {
+    color: #f9fafb !important; /* Branco para melhor legibilidade */
+}
+
+.theme-dark_blue .nav-tabs .nav-link {
+    border-color: transparent;
+}
+
+.theme-dark_blue .nav-tabs .nav-link:hover,
+.theme-dark_blue .nav-tabs a.nav-link:hover {
+    color: #ffffff !important;
+    border-color: var(--bs-border-color);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.theme-dark_blue .nav-tabs .nav-link.active,
+.theme-dark_blue .nav-tabs a.nav-link.active {
+    background-color: var(--bs-tertiary-bg);
+    color: #ffffff !important;
+    border-color: var(--bs-border-color) var(--bs-border-color) var(--bs-tertiary-bg);
+}
+
+/* Ícones dentro das tabs também ficam brancos */
+.theme-dark_blue .nav-tabs .nav-link i,
+.theme-dark_blue .nav-tabs a.nav-link i {
+    color: #ffffff !important;
+}
+
+/* Pequenos textos informativos */
+.theme-dark_blue small,
+.theme-dark_blue .small {
+    color: var(--bs-secondary-color) !important;
+}
+
+/* Alertas */
+.theme-dark_blue .alert {
+    border-color: var(--bs-border-color);
+}
+
+.theme-dark_blue .alert-info {
+    background-color: #1e3a5f;
+    border-color: #2563eb;
+    color: #93c5fd;
+}
+
+.theme-dark_blue .alert-warning {
+    background-color: #4a3a1a;
+    border-color: #f59e0b;
+    color: #fcd34d;
+}
+
+.theme-dark_blue .alert-success {
+    background-color: #1a3a2a;
+    border-color: #10b981;
+    color: #6ee7b7;
+}
+
+.theme-dark_blue .alert-danger {
+    background-color: #3a1a1a;
+    border-color: #ef4444;
+    color: #fca5a5;
+}
+
+/* ========================================
+   CORREÇÃO ADICIONAL PARA NAV-LINKS
+   Deve ficar no final para ter prioridade
+   ======================================== */
+
+/* Força texto branco em TODAS as abas no tema escuro */
+body.theme-dark_blue .nav-tabs .nav-link,
+body.theme-dark_blue .nav-tabs a.nav-link,
+body.theme-dark_blue a.nav-link,
+body.theme-dark_blue .nav-link {
+    color: #f9fafb !important;
+}
+
+/* Aba ativa - texto branco também */
+body.theme-dark_blue .nav-tabs .nav-link.active,
+body.theme-dark_blue .nav-tabs a.nav-link.active,
+body.theme-dark_blue a.nav-link.active,
+body.theme-dark_blue .nav-link.active {
+    color: #ffffff !important;
+    background-color: var(--bs-tertiary-bg) !important;
+}
+
+/* Hover - texto branco */
+body.theme-dark_blue .nav-tabs .nav-link:hover,
+body.theme-dark_blue .nav-tabs a.nav-link:hover,
+body.theme-dark_blue a.nav-link:hover,
+body.theme-dark_blue .nav-link:hover {
+    color: #ffffff !important;
+}
+
+/* Ícones dentro das abas */
+body.theme-dark_blue .nav-tabs .nav-link i,
+body.theme-dark_blue .nav-tabs a.nav-link i,
+body.theme-dark_blue a.nav-link i,
+body.theme-dark_blue .nav-link i {
+    color: #ffffff !important;
+}
+
+/* ========================================
+   TOOLTIPS NO TEMA ESCURO
+   ======================================== */
+/* Garante que os tooltips tenham texto branco no tema escuro */
+.theme-dark_blue .tooltip-inner,
+body.theme-dark_blue .tooltip-inner {
+    color: #ffffff !important;
+    background-color: #343a40;
+}
+
+.theme-dark_blue .bs-tooltip-top .tooltip-arrow::before,
+body.theme-dark_blue .bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #343a40 !important;
+}
+
+.theme-dark_blue .bs-tooltip-bottom .tooltip-arrow::before,
+body.theme-dark_blue .bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #343a40 !important;
+}
+
+.theme-dark_blue .bs-tooltip-start .tooltip-arrow::before,
+body.theme-dark_blue .bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #343a40 !important;
+}
+
+.theme-dark_blue .bs-tooltip-end .tooltip-arrow::before,
+body.theme-dark_blue .bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #343a40 !important;
+}
+
+/* ========================================
+   PADRONIZAÇÃO DE BOTÕES PRINCIPAIS
+   ======================================== */
+/* Botões principais: Nova Máquina, Scanner, Exportar Dados, etc */
+.btn-primary-custom,
+.btn-secondary-custom,
+.btn-success-custom {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Classe genérica para botões em toolbar */
+.btn-toolbar .btn:not(.btn-group-sm .btn) {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Botões com ícone */
+.btn-primary-custom i,
+.btn-secondary-custom i,
+.btn-success-custom i,
+.btn-toolbar .btn:not(.btn-group-sm .btn) i {
+    margin: 0 !important;
+    padding: 0 !important;
 }

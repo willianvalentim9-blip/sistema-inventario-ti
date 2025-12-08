@@ -18,7 +18,7 @@ if ($product_id <= 0) {
 
 try {
     $pdo = getConnection();
-    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
     $stmt->execute([$product_id]);
     $product = $stmt->fetch();
     if (!$product) {

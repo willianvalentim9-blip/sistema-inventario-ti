@@ -118,11 +118,29 @@ if ($error_message) {
             .then(response => response.json())
             .then(data => {
                 const modal = bootstrap.Modal.getInstance(stockOutForm.closest('.modal'));
-                
+
                 if (data.success) {
                     modal.hide();
-                    showAlert(data.message, 'success');
-                    setTimeout(() => location.reload(), 1500);
+
+                    // ========================================
+                    // EXIBIR AVISO SE ESTOQUE FICOU ABAIXO DO MÍNIMO
+                    // ========================================
+                    if (data.warning && data.warning.trim() !== '') {
+                        // Mostra o alerta de sucesso primeiro
+                        showAlert(data.message, 'success');
+
+                        // Depois de 500ms mostra o warning
+                        setTimeout(() => {
+                            showAlert(data.warning, 'warning', 8000); // 8 segundos para ler
+                        }, 500);
+
+                        // Recarrega após 9 segundos (tempo para ler ambos os alertas)
+                        setTimeout(() => location.reload(), 9000);
+                    } else {
+                        // Sem warning, comportamento normal
+                        showAlert(data.message, 'success');
+                        setTimeout(() => location.reload(), 1500);
+                    }
                 } else {
                     showAlert(data.message, 'danger');
                     submitButton.innerHTML = originalButtonHtml;

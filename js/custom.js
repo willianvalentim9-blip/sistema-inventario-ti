@@ -188,6 +188,24 @@ function openMachineStockInModal(id, name) {
 }
 
 /**
+ * Função para abrir o modal de dar entrada em um WAREHOUSE.
+ */
+function openWarehouseStockInModal(id, name, currentStock, maxStock) {
+    const url = `warehouse_stock_in.php?id=${id}`;
+    const title = `Dar Entrada: ${name}`;
+    openActionModal(url, title);
+}
+
+/**
+ * Função para abrir o modal de dar saída em um WAREHOUSE.
+ */
+function openWarehouseStockOutModal(id, name, currentStock) {
+    const url = `warehouse_stock_out.php?id=${id}`;
+    const title = `Dar Baixa: ${name}`;
+    openActionModal(url, title);
+}
+
+/**
  * Abre um modal de confirmação para exclusão.
  */
 function openDeleteModal(type, id, name) {
@@ -198,6 +216,7 @@ function openDeleteModal(type, id, name) {
         case 'product': itemType = 'produto'; url = 'delete_product.php'; break;
         case 'machine': itemType = 'máquina'; url = 'delete_machine.php'; break;
         case 'user': itemType = 'usuário'; url = 'delete_user.php'; break;
+        case 'warehouse': itemType = 'item de warehouse'; url = 'delete_warehouse.php'; break;
         default: console.error('Tipo de exclusão desconhecido:', type); return;
     }
 
@@ -358,6 +377,19 @@ function toggleTheme() {
         const icon = themeToggleButton.querySelector("i");
         icon.className = newTheme === "dark_blue" ? "fas fa-sun" : "fas fa-moon";
     }
+
+    // Fix de cor das nav-links após trocar tema
+    setTimeout(fixNavLinksColor, 50);
+}
+
+// Força cor branca em nav-links no tema escuro
+function fixNavLinksColor() {
+    if (document.body.classList.contains('theme-dark_blue')) {
+        const navLinks = document.querySelectorAll('.nav-link, a.nav-link');
+        navLinks.forEach(link => {
+            link.style.color = '#f9fafb';
+        });
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -368,4 +400,13 @@ document.addEventListener("DOMContentLoaded", () => {
         icon.className = currentTheme === "dark_blue" ? "fas fa-sun" : "fas fa-moon";
         themeToggleButton.addEventListener("click", toggleTheme);
     }
+
+    // Fix de cor das nav-links
+    fixNavLinksColor();
+
+    // Observer para detectar mudanças no DOM (tabs dinâmicas)
+    const observer = new MutationObserver(() => {
+        fixNavLinksColor();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 });

@@ -5,6 +5,7 @@ requireLogin();
 $page_title = 'Imprimir Código de Barras';
 $product_id = $_GET['product_id'] ?? null;
 $machine_id = $_GET['machine_id'] ?? null;
+$warehouse_id = $_GET['warehouse_id'] ?? null;
 $code = $_GET['code'] ?? null;
 $item = null;
 $item_type = '';
@@ -34,6 +35,19 @@ if ($product_id) {
         }
     } catch (PDOException $e) {
         error_log("Erro ao buscar máquina: " . $e->getMessage());
+    }
+} elseif ($warehouse_id) {
+    try {
+        $pdo = getConnection();
+        $stmt = $pdo->prepare("SELECT * FROM warehouse WHERE id = ?");
+        $stmt->execute([$warehouse_id]);
+        $item = $stmt->fetch();
+        if ($item) {
+            $code = $item['barcode'] ?: $item['serial_number'] ?: ('WH-' . $item['id']);
+            $item_type = $item['category'];
+        }
+    } catch (PDOException $e) {
+        error_log("Erro ao buscar item do armazém: " . $e->getMessage());
     }
 }
 

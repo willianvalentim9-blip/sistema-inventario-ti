@@ -45,12 +45,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $error_message = 'O nome do produto é obrigatório.';
     } elseif (empty($category)) {
         $error_message = 'A categoria do produto é obrigatória.';
+    } elseif ($min_quantity < 1) {
+        $error_message = '⚠️ AVISO: A quantidade mínima deve ser no mínimo 1. Defina um valor válido para o controle de estoque.';
+    } elseif ($max_quantity < 1) {
+        $error_message = '⚠️ AVISO: A quantidade máxima deve ser no mínimo 1. Defina um valor válido para o controle de estoque.';
+    } elseif ($min_quantity == 1 && $max_quantity == 1) {
+        $error_message = '⚠️ AVISO: A quantidade mínima e máxima não podem ser ambas 1. Defina valores diferentes para o controle de estoque.';
     } elseif ($quantity < 0) {
         $error_message = 'A quantidade não pode ser negativa.';
     } elseif ($price < 0) {
         $error_message = 'O preço não pode ser negativo.';
+    } elseif ($min_quantity > $max_quantity && $max_quantity > 0) {
+        $error_message = 'A quantidade mínima (' . $min_quantity . ') não pode ser maior que a quantidade máxima (' . $max_quantity . ').';
     } elseif ($max_quantity > 0 && $quantity > $max_quantity) {
-        $error_message = 'A quantidade inicial (' . $quantity . ') não pode ser maior que a quantidade máxima permitida (' . $max_quantity . ').';
+        $error_message = 'A quantidade inicial (' . $quantity . ') não pode ser maior que a quantidade máxima permitida (' . $max_quantity . '). O produto está no limite máximo de estoque.';
     } else {
         try {
             $pdo = getConnection();
@@ -80,41 +88,83 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
             
             if (empty($error_message)) {
-                if (empty($serial_number) && empty($barcode)) {
-                    $categoryCode = '';
-                    switch (strtoupper($category)) {
-                        case 'CPU': $categoryCode = 'CPU'; break;
-                        case 'RAM': $categoryCode = 'RAM'; break;
-                        case 'SSD': $categoryCode = 'SSD'; break;
-                        case 'HDD': $categoryCode = 'HDD'; break;
-                        case 'GPU': $categoryCode = 'GPU'; break;
-                        case 'MOTHERBOARD': $categoryCode = 'MB'; break;
-                        case 'PSU': $categoryCode = 'PSU'; break;
-                        case 'CASE': $categoryCode = 'CASE'; break;
-                        case 'MONITOR': $categoryCode = 'MON'; break;
-                        case 'KEYBOARD': $categoryCode = 'KB'; break;
-                        case 'MOUSE': $categoryCode = 'MS'; break;
-                        case 'NETWORK': $categoryCode = 'NET'; break;
-                        default: $categoryCode = 'GEN';
-                    }
-                    
-                    $timestamp = time();
-                    $randomNumber = rand(1000, 9999);
-                    $generated_barcode = 'IT-' . $categoryCode . '-' . $timestamp . '-' . $randomNumber;
-                    
+                // Pegar total de produtos para contador
+                $countStmt = $pdo->query("SELECT COUNT(*) + 1 as next_id FROM products");
+                $nextCount = $countStmt->fetch()['next_id'];
+
+                // Código da categoria
+                $categoryCode = '';
+                switch (strtoupper($category)) {
+                    case 'CPU': $categoryCode = 'CPU'; break;
+                    case 'RAM': $categoryCode = 'RAM'; break;
+                    case 'SSD': $categoryCode = 'SSD'; break;
+                    case 'HDD': $categoryCode = 'HDD'; break;
+                    case 'GPU': $categoryCode = 'GPU'; break;
+                    case 'MOTHERBOARD': $categoryCode = 'MB'; break;
+                    case 'PSU': $categoryCode = 'PSU'; break;
+                    case 'CASE': $categoryCode = 'CASE'; break;
+                    case 'MONITOR': $categoryCode = 'MON'; break;
+                    case 'KEYBOARD': $categoryCode = 'KB'; break;
+                    case 'MOUSE': $categoryCode = 'MS'; break;
+                    case 'NETWORK': $categoryCode = 'NET'; break;
+                    default: $categoryCode = 'GEN';
+                }
+
+                $dateCode = date('Ymd'); // 20250105
+                $timeCode = date('His');  // 143052
+
+                // GERAR NÚMERO DE SÉRIE se vazio
+                // Padrão: SN-{CATEGORIA}-{CONTADOR}-{DATA}
+                if (empty($serial_number)) {
+                    $serial_number = sprintf('SN-%s-%05d-%s', $categoryCode, $nextCount, $dateCode);
+
+                    // Verificar duplicatas
                     $attempts = 0;
-                    while ($attempts < 5) {
-                        $check_stmt = $pdo->prepare("SELECT id FROM products WHERE barcode = ?");
-                        $check_stmt->execute([$generated_barcode]);
-                        if (!$check_stmt->fetch()) {
+                    while ($attempts < 10) {
+                        $checkSN = $pdo->prepare("SELECT id FROM products WHERE serial_number = ?");
+                        $checkSN->execute([$serial_number]);
+                        if (!$checkSN->fetch()) {
                             break;
                         }
-                        $randomNumber = rand(1000, 9999);
-                        $generated_barcode = 'IT-' . $categoryCode . '-' . $timestamp . '-' . $randomNumber;
+                        $serial_number = sprintf('SN-%s-%05d-%s-%02d', $categoryCode, $nextCount, $dateCode, $attempts);
                         $attempts++;
                     }
-                    
-                    $barcode = $generated_barcode;
+                }
+
+                // GERAR CÓDIGO DE BARRAS se vazio
+                // Padrão: {CONTADOR_8_DIGITOS}{TIMESTAMP_4_DIGITOS} = 12 dígitos (EAN-12)
+                if (empty($barcode)) {
+                    $barcode = sprintf('%08d%04d', $nextCount, substr($timeCode, -4));
+
+                    // Verificar duplicatas
+                    $attempts = 0;
+                    while ($attempts < 10) {
+                        $checkBC = $pdo->prepare("SELECT id FROM products WHERE barcode = ?");
+                        $checkBC->execute([$barcode]);
+                        if (!$checkBC->fetch()) {
+                            break;
+                        }
+                        $barcode = sprintf('%08d%04d', $nextCount, substr($timeCode, -4) + $attempts);
+                        $attempts++;
+                    }
+                }
+
+                // GERAR QR CODE se vazio
+                // Padrão: QR-{CATEGORIA}-{CONTADOR}-{TIMESTAMP}
+                if (empty($qr_code)) {
+                    $qr_code = sprintf('QR-%s-%05d-%s', $categoryCode, $nextCount, $timeCode);
+
+                    // Verificar duplicatas
+                    $attempts = 0;
+                    while ($attempts < 10) {
+                        $checkQR = $pdo->prepare("SELECT id FROM products WHERE qr_code = ?");
+                        $checkQR->execute([$qr_code]);
+                        if (!$checkQR->fetch()) {
+                            break;
+                        }
+                        $qr_code = sprintf('QR-%s-%05d-%s-%02d', $categoryCode, $nextCount, $timeCode, $attempts);
+                        $attempts++;
+                    }
                 }
                 
                 $stmt = $pdo->prepare("
@@ -150,7 +200,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         'warranty_period_unit' => $warranty_period_unit ?? null,
                         'warranty_notes' => $warranty_notes ?? ''
                     ];
-                    registerWarrantyHistory($pdo, $product_id, 'CREATE', [], $warranty_data, $_SESSION["user_id"]);
+                    registerWarrantyHistory($pdo, $product_id, 'CREATE', [], $warranty_data, $_SESSION["user_id"], 'product');
                 }
 
                 logProductMovement(
@@ -187,6 +237,9 @@ $code_from_scanner = $_GET['code'] ?? '';
 ?>
 
 <?php include 'includes/header.php'; ?>
+
+<!-- Link CSS para Media Upload -->
+<link rel="stylesheet" href="CSS/media-upload.css">
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2 text-primary-custom">
@@ -285,23 +338,42 @@ $code_from_scanner = $_GET['code'] ?? '';
                             </div>
                             
                             <div class="mb-3">
-                                <label for="product_image" class="form-label form-label-custom">
+                                <label class="form-label form-label-custom">
                                     <i class="fas fa-camera me-1"></i>
                                     Imagem do Produto
                                 </label>
-                                <div class="upload-area border rounded p-4 text-center" id="upload-area" style="cursor: pointer; border-style: dashed !important;">
-                                    <input type="file" class="form-control form-control-custom" id="product_image" name="product_image" accept="image/*" style="display: none;">
-                                    <div class="upload-placeholder" id="upload-placeholder">
-                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                                        <p class="text-muted mb-2">Clique aqui ou arraste uma imagem</p>
-                                        <small class="text-muted">JPG, PNG, GIF ou WebP (máx. 5MB)</small>
+                                <div class="media-upload-container" id="product-upload-container">
+                                    <div class="media-upload-placeholder">
+                                        <div class="media-upload-placeholder-content">
+                                            <span class="media-upload-placeholder-icon">
+                                                <i class="fas fa-image"></i>
+                                            </span>
+                                            <div class="media-upload-placeholder-title">Adicionar Imagem</div>
+                                            <div class="media-upload-placeholder-subtitle">Escolha uma fonte</div>
+                                            <div class="media-upload-actions">
+                                                <button type="button" class="media-upload-btn" data-action="gallery">
+                                                    <i class="fas fa-images"></i>
+                                                    Galeria
+                                                </button>
+                                                <button type="button" class="media-upload-btn" data-action="camera">
+                                                    <i class="fas fa-camera"></i>
+                                                    Câmera
+                                                </button>
+                                            </div>
+                                            <div class="media-upload-drag-hint">
+                                                <i class="fas fa-hand-point-up"></i>
+                                                Ou arraste aqui
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="upload-preview" id="upload-preview" style="display: none;">
-                                        <img id="preview-image" src="" alt="Preview" class="img-thumbnail mb-2" style="max-width: 200px;">
-                                        <div>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeImage()">
-                                                <i class="fas fa-trash me-1"></i>
-                                                Remover Imagem
+                                    <div class="media-upload-preview" style="display: none;">
+                                        <img class="media-upload-preview-image" src="" alt="Preview">
+                                        <div class="media-upload-preview-overlay">
+                                            <button type="button" class="media-upload-action-btn" data-action="change" title="Trocar imagem">
+                                                <i class="fas fa-camera"></i>
+                                            </button>
+                                            <button type="button" class="media-upload-action-btn danger" data-action="remove" title="Remover imagem">
+                                                <i class="fas fa-trash"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -328,7 +400,7 @@ $code_from_scanner = $_GET['code'] ?? '';
                                     <button class="btn btn-outline-secondary" type="button" onclick="generateBarcode()" data-bs-toggle="tooltip" title="Gerar código automaticamente">
                                         <i class="fas fa-magic"></i>
                                     </button>
-                                    <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#scannerModal" data-target-input="barcode">
+                                    <button class="btn btn-outline-primary" type="button" data-open-scanner data-target-input="barcode">
                                         <i class="fas fa-camera"></i>
                                     </button>
                                 </div>
@@ -344,7 +416,7 @@ $code_from_scanner = $_GET['code'] ?? '';
                                     <button class="btn btn-outline-secondary" type="button" onclick="generateQRCode()" data-bs-toggle="tooltip" title="Gerar código QR automaticamente">
                                         <i class="fas fa-magic"></i>
                                     </button>
-                                     <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#scannerModal" data-target-input="qr_code">
+                                     <button class="btn btn-outline-primary" type="button" data-open-scanner data-target-input="qr_code">
                                         <i class="fas fa-camera"></i>
                                     </button>
                                 </div>
@@ -361,19 +433,25 @@ $code_from_scanner = $_GET['code'] ?? '';
                             <div class="mb-3">
                                 <label for="min_quantity" class="form-label form-label-custom">
                                     <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
-                                    Quantidade Mínima
+                                    Quantidade Mínima *
                                 </label>
-                                <input type="number" class="form-control form-control-custom" id="min_quantity" name="min_quantity" min="0" value="<?php echo htmlspecialchars($min_quantity ?? 5); ?>" placeholder="Alerta quando estoque baixo">
-                                <div class="form-text">Quantidade mínima para alerta de estoque baixo</div>
+                                <input type="number" class="form-control form-control-custom" id="min_quantity" name="min_quantity" min="1" value="<?php echo htmlspecialchars($min_quantity ?? 5); ?>" placeholder="Mínimo: 1" required>
+                                <div class="form-text" id="min-quantity-help">Quantidade mínima para alerta de estoque baixo (mínimo: 1)</div>
+                                <div class="invalid-feedback" id="min-quantity-error" style="display: none;">
+                                    ⚠️ Valor mínimo necessário para salvar: 1
+                                </div>
                             </div>
-                            
+
                             <div class="mb-3">
                                 <label for="max_quantity" class="form-label form-label-custom">
                                     <i class="fas fa-chart-line me-1 text-info"></i>
-                                    Quantidade Máxima
+                                    Quantidade Máxima *
                                 </label>
-                                <input type="number" class="form-control form-control-custom" id="max_quantity" name="max_quantity" min="1" value="<?php echo htmlspecialchars($max_quantity ?? 100); ?>" placeholder="Limite máximo de estoque">
-                                <div class="form-text">Quantidade máxima permitida no estoque</div>
+                                <input type="number" class="form-control form-control-custom" id="max_quantity" name="max_quantity" min="1" value="<?php echo htmlspecialchars($max_quantity ?? 100); ?>" placeholder="Mínimo: 1" required>
+                                <div class="form-text" id="max-quantity-help">Quantidade máxima permitida no estoque (mínimo: 1)</div>
+                                <div class="invalid-feedback" id="max-quantity-error" style="display: none;">
+                                    ⚠️ Valor mínimo necessário para salvar: 1
+                                </div>
                             </div>
                             
                             <div class="mb-3">
@@ -408,71 +486,17 @@ $code_from_scanner = $_GET['code'] ?? '';
                     </div>
                     <div class="row">
                         <div class="col-12">
-                            <div class="d-flex align-items-center justify-content-between mb-3">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="has_warranty" name="has_warranty" value="1">
-                                    <label class="form-check-label" for="has_warranty">
-                                        <strong>Produto possui garantia?</strong>
-                                    </label>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-outline-info" id="openWarrantyModalBtn" style="display: none;" data-bs-toggle="modal" data-bs-target="#warrantyModalProduct">
-                                    <i class="fas fa-shield-alt me-1"></i> Editar Garantia
-                                </button>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" role="switch" id="has_warranty" name="has_warranty" value="1">
+                                <label class="form-check-label" for="has_warranty">
+                                    <strong>Produto possui garantia?</strong>
+                                </label>
+                                <small class="d-block text-muted mt-1">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Marque se o produto possui garantia. Você poderá gerenciar todos os detalhes após salvar o produto.
+                                </small>
                             </div>
 
-                            <div id="warranty-details" style="display: none;">
-                                <div class="alert alert-light border border-info p-3 mb-3">
-                                    <i class="fas fa-info-circle me-2 text-info"></i>
-                                    <small><strong>Dica:</strong> Clique em "Editar Garantia" para preenchimento simplificado e otimizado dos dados.</small>
-                                </div>
-                                <div class="p-3 border rounded bg-light mb-4">
-                                    <!-- CAMPOS OCULTOS - Sincronizados do modal -->
-                                    <input type="hidden" id="warranty_provider" name="warranty_provider">
-                                    <input type="hidden" id="invoice_number" name="invoice_number">
-                                    <input type="hidden" id="warranty_start_date" name="warranty_start_date">
-                                    <input type="hidden" id="warranty_period_value" name="warranty_period_value">
-                                    <input type="hidden" id="warranty_period_unit" name="warranty_period_unit">
-                                    <input type="hidden" id="warranty_end_date" name="warranty_end_date">
-                                    <input type="hidden" id="warranty_notes" name="warranty_notes">
-
-                                    <!-- RESUMO DE GARANTIA (VISUALIZAÇÃO) -->
-                                    <div id="warranty-summary" class="d-none">
-                                        <div class="row">
-                                            <div class="col-md-6 mb-2">
-                                                <small class="text-muted"><i class="fas fa-store me-1"></i>Fornecedor:</small>
-                                                <div class="fw-bold" id="summary-provider">-</div>
-                                            </div>
-                                            <div class="col-md-6 mb-2">
-                                                <small class="text-muted"><i class="fas fa-file-invoice me-1"></i>Nota Fiscal:</small>
-                                                <div class="fw-bold" id="summary-invoice">-</div>
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class="col-md-4 mb-2">
-                                                <small class="text-muted"><i class="fas fa-calendar-alt me-1"></i>Início:</small>
-                                                <div class="fw-bold" id="summary-start">-</div>
-                                            </div>
-                                            <div class="col-md-4 mb-2">
-                                                <small class="text-muted"><i class="fas fa-hourglass-half me-1"></i>Duração:</small>
-                                                <div class="fw-bold" id="summary-period">-</div>
-                                            </div>
-                                            <div class="col-md-4 mb-2">
-                                                <small class="text-muted"><i class="fas fa-calendar-check me-1"></i>Término:</small>
-                                                <div class="fw-bold" id="summary-end">-</div>
-                                            </div>
-                                        </div>
-                                        <div class="mt-3 p-2 bg-white rounded border border-left-info">
-                                            <small class="text-muted d-block mb-1"><i class="fas fa-sticky-note me-1"></i>Anotações:</small>
-                                            <div id="summary-notes" class="text-break" style="font-size: 0.9em;"></div>
-                                        </div>
-                                        <div class="mt-2">
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="clearWarrantyData()">
-                                                <i class="fas fa-trash me-1"></i> Limpar Dados
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                     <div class="row">
@@ -490,7 +514,7 @@ $code_from_scanner = $_GET['code'] ?? '';
                                         <i class="fas fa-times me-1"></i>
                                         Cancelar
                                     </a>
-                                    <button type="submit" class="btn btn-primary-custom">
+                                    <button type="submit" class="btn btn-primary-custom" id="save-product-btn" disabled>
                                         <i class="fas fa-save me-1"></i>
                                         Salvar Produto
                                     </button>
@@ -505,250 +529,161 @@ $code_from_scanner = $_GET['code'] ?? '';
 </div>
 
 <?php include 'includes/footer.php'; ?>
-<?php $GLOBALS['is_inside_product_form'] = true; ?>
-<?php include 'includes/warranty_modal_inline.php'; ?>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // REFERÊNCIAS
     const hasWarrantyCheckbox = document.getElementById('has_warranty');
-    const warrantyDetailsDiv = document.getElementById('warranty-details');
-    const openWarrantyModalBtn = document.getElementById('openWarrantyModalBtn');
-    const warrantySummary = document.getElementById('warranty-summary');
 
     // ========================================
-    // MOSTRAR/OCULTAR SEÇÃO DE GARANTIA
+    // VALIDAÇÃO DE QUANTIDADE MÍNIMA E MÁXIMA
     // ========================================
-    hasWarrantyCheckbox.addEventListener('change', function() {
-        if (this.checked) {
-            warrantyDetailsDiv.style.display = 'block';
-            openWarrantyModalBtn.style.display = 'inline-block';
-            // Se houver dados salvos, mostra o resumo
-            updateWarrantySummary();
+    const saveProductBtn = document.getElementById('save-product-btn');
+    const minQuantityInput = document.getElementById('min_quantity');
+    const maxQuantityInput = document.getElementById('max_quantity');
+    const quantityInput = document.getElementById('quantity');
+    const minQuantityError = document.getElementById('min-quantity-error');
+    const maxQuantityError = document.getElementById('max-quantity-error');
+
+    function validateQuantities() {
+        const minQty = parseInt(minQuantityInput.value) || 0;
+        const maxQty = parseInt(maxQuantityInput.value) || 0;
+        const currentQty = parseInt(quantityInput?.value) || 0;
+        let isValid = true;
+
+        // Validar quantidade mínima
+        if (minQty < 1) {
+            minQuantityInput.classList.add('is-invalid');
+            minQuantityError.textContent = '⚠️ Valor mínimo necessário para salvar: 1';
+            minQuantityError.style.display = 'block';
+            isValid = false;
         } else {
-            warrantyDetailsDiv.style.display = 'none';
-            openWarrantyModalBtn.style.display = 'none';
-            warrantySummary.classList.add('d-none');
+            minQuantityInput.classList.remove('is-invalid');
+            minQuantityError.style.display = 'none';
         }
-    });
 
-    // ========================================
-    // ATUALIZAR RESUMO DA GARANTIA
-    // ========================================
-    window.updateWarrantySummary = function() {
-        const provider = document.getElementById('warranty_provider').value;
-        const invoice = document.getElementById('invoice_number').value;
-        const startDate = document.getElementById('warranty_start_date').value;
-        const periodValue = document.getElementById('warranty_period_value').value;
-        const periodUnit = document.getElementById('warranty_period_unit').value;
-        const endDate = document.getElementById('warranty_end_date').value;
-        const notes = document.getElementById('warranty_notes').value;
-
-        if (provider || invoice || startDate || periodValue || endDate) {
-            document.getElementById('summary-provider').textContent = provider || '-';
-            document.getElementById('summary-invoice').textContent = invoice || '-';
-            document.getElementById('summary-start').textContent = startDate ? new Date(startDate).toLocaleDateString('pt-BR') : '-';
-            document.getElementById('summary-period').textContent = periodValue && periodUnit ? `${periodValue} ${periodUnit}` : '-';
-            document.getElementById('summary-end').textContent = endDate ? new Date(endDate).toLocaleDateString('pt-BR') : '-';
-            document.getElementById('summary-notes').textContent = notes || '(Sem anotações)';
-            
-            warrantySummary.classList.remove('d-none');
+        // Validar quantidade máxima
+        if (maxQty < 1) {
+            maxQuantityInput.classList.add('is-invalid');
+            maxQuantityError.textContent = '⚠️ Valor mínimo necessário para salvar: 1';
+            maxQuantityError.style.display = 'block';
+            isValid = false;
         } else {
-            warrantySummary.classList.add('d-none');
+            maxQuantityInput.classList.remove('is-invalid');
+            maxQuantityError.style.display = 'none';
         }
-    };
 
-    // ========================================
-    // LIMPAR DADOS DE GARANTIA
-    // ========================================
-    window.clearWarrantyData = function() {
-        if (!confirm('Deseja limpar todos os dados de garantia?')) return;
-        
-        document.getElementById('warranty_provider').value = '';
-        document.getElementById('invoice_number').value = '';
-        document.getElementById('warranty_start_date').value = '';
-        document.getElementById('warranty_period_value').value = '';
-        document.getElementById('warranty_period_unit').value = 'months';
-        document.getElementById('warranty_end_date').value = '';
-        document.getElementById('warranty_notes').value = '';
-        
-        // Resetar também no modal
-        document.getElementById('product_warranty_provider').value = '';
-        document.getElementById('product_invoice_number').value = '';
-        document.getElementById('product_warranty_start_date').value = '';
-        document.getElementById('product_warranty_period_value').value = '';
-        document.getElementById('product_warranty_period_unit').value = 'months';
-        document.getElementById('product_warranty_end_date').value = '';
-        document.getElementById('product_warranty_notes').value = '';
-        
-        warrantySummary.classList.add('d-none');
-        showAlert('Dados de garantia limpos!', 'info');
-    };
+        // VALIDAÇÃO: min e max não podem ser ambos 1
+        if (minQty === 1 && maxQty === 1) {
+            minQuantityInput.classList.add('is-invalid');
+            maxQuantityInput.classList.add('is-invalid');
+            if (minQuantityError) {
+                minQuantityError.textContent = '⚠️ Min e max não podem ser ambas 1';
+                minQuantityError.style.display = 'block';
+            }
+            isValid = false;
+        }
 
-    // ========================================
-    // MONITORAR MUDANÇAS NO MODAL
-    // ========================================
-    const warrantyModal = document.getElementById('warrantyModalProduct');
-    if (warrantyModal) {
-        warrantyModal.addEventListener('hidden.bs.modal', function() {
-            // Atualiza o resumo quando o modal é fechado
-            updateWarrantySummary();
-        });
+        // VALIDAÇÃO: min não pode ser maior que max
+        if (minQty > maxQty && maxQty > 0) {
+            minQuantityInput.classList.add('is-invalid');
+            maxQuantityInput.classList.add('is-invalid');
+            if (minQuantityError) {
+                minQuantityError.textContent = `⚠️ A quantidade mínima (${minQty}) não pode ser maior que a máxima (${maxQty})`;
+                minQuantityError.style.display = 'block';
+            }
+            isValid = false;
+        }
+
+        // VALIDAÇÃO: quantidade atual não pode ser maior que máxima
+        if (maxQty > 0 && currentQty > maxQty) {
+            maxQuantityInput.classList.add('is-invalid');
+            if (maxQuantityError) {
+                maxQuantityError.textContent = `⚠️ A quantidade inicial (${currentQty}) não pode ser maior que a máxima (${maxQty})`;
+                maxQuantityError.style.display = 'block';
+            }
+            isValid = false;
+        }
+
+        // Habilitar/desabilitar botão salvar
+        if (saveProductBtn) {
+            saveProductBtn.disabled = !isValid;
+        }
+
+        return isValid;
     }
 
-    // Sincronizar dados quando o formulário é enviado
-    const form = document.getElementById('add-product-form');
-    if (form) {
-        form.addEventListener('submit', function() {
-            // Os dados já estão nos campos hidden, apenas certifica-se
-            const fields = ['warranty_provider', 'invoice_number', 'warranty_start_date', 'warranty_period_value', 'warranty_period_unit', 'warranty_end_date', 'warranty_notes'];
-            
-            if (hasWarrantyCheckbox.checked) {
-                fields.forEach(field => {
-                    const modalField = document.getElementById('product_' + field);
-                    const formField = document.getElementById(field);
-                    if (modalField && formField) {
-                        formField.value = modalField.value;
-                    }
-                });
+    // Validar em tempo real
+    if (minQuantityInput) {
+        minQuantityInput.addEventListener('input', validateQuantities);
+        minQuantityInput.addEventListener('change', validateQuantities);
+    }
+    if (maxQuantityInput) {
+        maxQuantityInput.addEventListener('input', validateQuantities);
+        maxQuantityInput.addEventListener('change', validateQuantities);
+    }
+    if (quantityInput) {
+        quantityInput.addEventListener('input', validateQuantities);
+        quantityInput.addEventListener('change', validateQuantities);
+    }
+
+    // Validar no carregamento da página
+    setTimeout(() => {
+        validateQuantities();
+    }, 100);
+
+    // Prevenir submissão se inválido
+    const addProductForm = document.getElementById('add-product-form');
+    if (addProductForm) {
+        addProductForm.addEventListener('submit', function(e) {
+            const currentMinQty = parseInt(minQuantityInput.value) || 0;
+            const currentMaxQty = parseInt(maxQuantityInput.value) || 0;
+            const currentQty = parseInt(quantityInput?.value) || 0;
+
+            if (!validateQuantities()) {
+                e.preventDefault();
+
+                // Verificar qual é o erro específico
+                if (currentMinQty === 1 && currentMaxQty === 1) {
+                    alert('⚠️ AVISO: A quantidade mínima e máxima não podem ser ambas 1.\n\nDefina valores diferentes para o controle de estoque.');
+                } else if (currentMinQty > currentMaxQty && currentMaxQty > 0) {
+                    alert(`⚠️ AVISO: A quantidade mínima (${currentMinQty}) não pode ser maior que a máxima (${currentMaxQty}).\n\nDefina valores válidos.`);
+                } else if (currentMaxQty > 0 && currentQty > currentMaxQty) {
+                    alert(`⚠️ AVISO: A quantidade inicial (${currentQty}) não pode ser maior que a máxima (${currentMaxQty}).\n\nO produto está no limite máximo de estoque.`);
+                } else {
+                    alert('⚠️ AVISO: As quantidades mínima e máxima devem ser no mínimo 1.\n\nDefina valores válidos para o controle de estoque antes de salvar.');
+                }
+
+                // Scroll para o primeiro campo inválido
+                if (minQuantityInput.classList.contains('is-invalid')) {
+                    minQuantityInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else if (maxQuantityInput.classList.contains('is-invalid')) {
+                    maxQuantityInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                return false;
             }
         });
     }
+
+
 });
 </script>
+
+<script src="js/media-upload.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- LÓGICA DA GARANTIA ---
-    const hasWarrantyCheckbox = document.getElementById('has_warranty');
-    const warrantyDetailsDiv = document.getElementById('warranty-details');
-    const warrantyStartDateInput = document.getElementById('warranty_start_date');
-    const warrantyPeriodValueInput = document.getElementById('warranty_period_value');
-    const warrantyPeriodUnitInput = document.getElementById('warranty_period_unit');
-    const warrantyEndDateInput = document.getElementById('warranty_end_date');
-
-    // Mostra/esconde os detalhes da garantia
-    hasWarrantyCheckbox.addEventListener('change', function() {
-        warrantyDetailsDiv.style.display = this.checked ? 'block' : 'none';
-    });
-
-    // Função para calcular a data final da garantia
-    function calculateEndDate() {
-        const startDate = warrantyStartDateInput.value;
-        const periodValue = parseInt(warrantyPeriodValueInput.value);
-        const periodUnit = warrantyPeriodUnitInput.value;
-
-        if (startDate && periodValue > 0) {
-            // Usar T00:00:00 para evitar problemas de fuso horário com new Date()
-            const date = new Date(startDate + 'T00:00:00'); 
-            
-            if (periodUnit === 'days') {
-                date.setDate(date.getDate() + periodValue);
-            } else if (periodUnit === 'months') {
-                date.setMonth(date.getMonth() + periodValue);
-            } else if (periodUnit === 'years') {
-                date.setFullYear(date.getFullYear() + periodValue);
-            }
-
-            // Formata a data para o padrão YYYY-MM-DD, que é o que o input[type=date] espera
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            
-            warrantyEndDateInput.value = `${year}-${month}-${day}`;
-        }
-    }
-
-    // Adiciona listeners para recalcular a data final sempre que um campo relevante mudar
-    warrantyStartDateInput.addEventListener('change', calculateEndDate);
-    warrantyPeriodValueInput.addEventListener('input', calculateEndDate);
-    warrantyPeriodUnitInput.addEventListener('change', calculateEndDate);
-
-document.addEventListener('DOMContentLoaded', function() {
-    // ... (restante do seu JavaScript original)
-    
-    const uploadArea = document.getElementById('upload-area');
-    const fileInput = document.getElementById('product_image');
-    const uploadPlaceholder = document.getElementById('upload-placeholder');
-    const uploadPreview = document.getElementById('upload-preview');
-    const previewImage = document.getElementById('preview-image');
-    const uploadedImageInput = document.getElementById('uploaded_image');
-    
-    uploadArea.addEventListener('click', function() { fileInput.click(); });
-    
-    uploadArea.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        uploadArea.style.backgroundColor = '#f8f9fa';
-    });
-    
-    uploadArea.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        uploadArea.style.backgroundColor = '';
-    });
-    
-    uploadArea.addEventListener('drop', function(e) {
-        e.preventDefault();
-        uploadArea.style.backgroundColor = '';
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFileUpload(files[0]);
-        }
-    });
-    
-    fileInput.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            handleFileUpload(this.files[0]);
-        }
-    });
-    
-    function handleFileUpload(file) {
-        if (file.size > 5 * 1024 * 1024) {
-            showAlert('Arquivo muito grande. Tamanho máximo: 5MB', 'warning');
-            return;
-        }
-        
-        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-        if (!allowedTypes.includes(file.type)) {
-            showAlert('Tipo de arquivo não permitido. Use: JPG, PNG, GIF ou WebP', 'warning');
-            return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            previewImage.src = e.target.result;
-            uploadPlaceholder.style.display = 'none';
-            uploadPreview.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-        
-        const formData = new FormData();
-        formData.append('image', file);
-        formData.append('type', 'products');
-        
-        fetch('upload_image.php', { method: 'POST', body: formData })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                uploadedImageInput.value = data.filename;
-                showAlert('Imagem enviada com sucesso!', 'success');
-            } else {
-                showAlert('Erro no upload: ' + data.message, 'danger');
-                removeImage();
-            }
-        })
-        .catch(error => {
-            showAlert('Erro no upload da imagem.', 'danger');
-            console.error('Error:', error);
-            removeImage();
-        });
-    }
-    
+    // ========================================
+    // VALIDAÇÃO DO FORMULÁRIO
+    // ========================================
     const form = document.getElementById('add-product-form');
     if (form) {
         form.addEventListener('submit', function(e) {
             const name = document.getElementById('name').value.trim();
             const category = document.getElementById('category').value;
             const quantity = parseInt(document.getElementById('quantity').value);
-            
+
             if (!name) {
                 e.preventDefault();
                 showAlert('O nome do produto é obrigatório.', 'warning');
@@ -767,12 +702,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('quantity').focus();
                 return false;
             }
-            
+
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Salvando...';
             submitBtn.disabled = true;
-            
+
             setTimeout(() => {
                 submitBtn.innerHTML = originalText;
                 submitBtn.disabled = false;
@@ -780,28 +715,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- LÓGICA DA GARANTIA ---
-    const hasWarrantyCheckbox = document.getElementById('has_warranty');
-    const warrantyDetailsDiv = document.getElementById('warranty-details');
+    // ========================================
+    // LÓGICA DA GARANTIA
+    // ========================================
     const warrantyStartDateInput = document.getElementById('warranty_start_date');
     const warrantyPeriodValueInput = document.getElementById('warranty_period_value');
     const warrantyPeriodUnitInput = document.getElementById('warranty_period_unit');
     const warrantyEndDateInput = document.getElementById('warranty_end_date');
 
-    // Mostra/esconde os detalhes da garantia
-    hasWarrantyCheckbox.addEventListener('change', function() {
-        warrantyDetailsDiv.style.display = this.checked ? 'block' : 'none';
-    });
-
     // Função para calcular a data final da garantia
-    function calculateEndDate() {
+    function calculateWarrantyEndDate() {
+        if (!warrantyStartDateInput || !warrantyEndDateInput) return;
+
         const startDate = warrantyStartDateInput.value;
         const periodValue = parseInt(warrantyPeriodValueInput.value);
         const periodUnit = warrantyPeriodUnitInput.value;
 
         if (startDate && periodValue > 0) {
-            const date = new Date(startDate + 'T00:00:00'); // Adiciona T00:00:00 para evitar problemas de fuso horário
-            
+            const date = new Date(startDate + 'T00:00:00');
+
             if (periodUnit === 'days') {
                 date.setDate(date.getDate() + periodValue);
             } else if (periodUnit === 'months') {
@@ -810,72 +742,66 @@ document.addEventListener('DOMContentLoaded', function() {
                 date.setFullYear(date.getFullYear() + periodValue);
             }
 
-            // Formata a data para YYYY-MM-DD
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
-            
+
             warrantyEndDateInput.value = `${year}-${month}-${day}`;
         }
     }
 
     // Adiciona listeners para recalcular a data final
-    if(warrantyStartDateInput) {
-        warrantyStartDateInput.addEventListener('change', calculateEndDate);
-        warrantyPeriodValueInput.addEventListener('input', calculateEndDate);
-        warrantyPeriodUnitInput.addEventListener('change', calculateEndDate);
+    if (warrantyStartDateInput) {
+        warrantyStartDateInput.addEventListener('change', calculateWarrantyEndDate);
+        warrantyPeriodValueInput.addEventListener('input', calculateWarrantyEndDate);
+        warrantyPeriodUnitInput.addEventListener('change', calculateWarrantyEndDate);
     }
+
+    // ========================================
+    // SUGESTÕES DE FABRICANTE POR CATEGORIA
+    // ========================================
+    const categorySelect = document.getElementById('category');
+    const manufacturerField = document.getElementById('manufacturer');
+
+    if (categorySelect && manufacturerField) {
+        categorySelect.addEventListener('change', function() {
+            const category = this.value;
+            const suggestions = {
+                'CPU': 'Intel, AMD',
+                'RAM': 'Kingston, Corsair, G.Skill',
+                'SSD': 'Kingston, Samsung, WD',
+                'HDD': 'Seagate, WD, Toshiba',
+                'GPU': 'NVIDIA, AMD, ASUS',
+                'Motherboard': 'ASUS, MSI, Gigabyte',
+                'PSU': 'Corsair, EVGA, Seasonic',
+                'Monitor': 'LG, Samsung, ASUS'
+            };
+            if (suggestions[category]) {
+                manufacturerField.setAttribute('placeholder', 'Ex: ' + suggestions[category]);
+            }
+        });
+    }
+    // ========================================
+    // FUNÇÃO: LIMPAR FORMULÁRIO
+    // ========================================
+    window.resetForm = function() {
+        if (confirm('Deseja limpar todos os campos do formulário?')) {
+            document.getElementById('add-product-form').reset();
+            if (hasWarrantyCheckbox) {
+                hasWarrantyCheckbox.checked = false;
+            }
+            showAlert('Formulário limpo!', 'info');
+        }
+    };
 });
 
 function removeImage() {
-    document.getElementById('upload-placeholder').style.display = 'block';
-    document.getElementById('upload-preview').style.display = 'none';
-    document.getElementById('preview-image').src = '';
     document.getElementById('uploaded_image').value = '';
-    document.getElementById('product_image').value = '';
-}
-
-function generateBarcode() {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    const barcode = timestamp.toString() + random.toString().padStart(3, '0');
-    document.getElementById('barcode').value = barcode.substring(0, 13);
-    showAlert('Código de barras gerado automaticamente.', 'info');
-}
-
-function generateQRCode() {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000);
-    const qrCode = 'QR' + timestamp.toString() + random.toString().padStart(4, '0');
-    document.getElementById('qr_code').value = qrCode;
-    showAlert('Código QR gerado automaticamente.', 'info');
-}
-
-function resetForm() {
-    if (confirm('Tem certeza que deseja limpar todos os campos?')) {
-        document.getElementById('add-product-form').reset();
-        removeImage();
-        showAlert('Formulário limpo com sucesso.', 'info');
+    const container = document.getElementById('product-upload-container');
+    if (container) {
+        const manager = window.productUploadManager;
+        if (manager) {
+            manager.removeImage();
+        }
     }
 }
-
-document.getElementById('category').addEventListener('change', function() {
-    const category = this.value;
-    const manufacturerField = document.getElementById('manufacturer');
-    const suggestions = {
-        'CPU': 'Intel, AMD', 'RAM': 'Kingston, Corsair, G.Skill',
-        'SSD': 'Kingston, Samsung, WD', 'HDD': 'Seagate, WD, Toshiba',
-        'GPU': 'NVIDIA, AMD, ASUS', 'Motherboard': 'ASUS, MSI, Gigabyte',
-        'PSU': 'Corsair, EVGA, Seasonic', 'Monitor': 'LG, Samsung, ASUS'
-    };
-    if (suggestions[category]) {
-        manufacturerField.setAttribute('placeholder', 'Ex: ' + suggestions[category]);
-    }
-});
-</script>
-
-<?php 
-if (empty($serial_number) && empty($barcode) && empty($qr_code)) {
-    $qr_code = 'PROD-' . strtoupper(uniqid());
-}
-?>

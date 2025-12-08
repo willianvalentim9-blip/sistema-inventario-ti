@@ -78,7 +78,7 @@ try {
         <form method="GET" action="" class="row g-3 align-items-end">
             <div class="col-md-5">
                 <label for="search" class="form-label form-label-custom"><i class="fas fa-search me-1"></i> Buscar por Termo</label>
-                <input type="text" class="form-control form-control-custom" id="search" name="search" placeholder="Nome, motivo, detalhes..." value="<?php echo htmlspecialchars($search); ?>">
+                <input type="text" class="form-control form-control-custom" id="search" name="search" placeholder="Produto, motivo, detalhes, usuário..." value="<?php echo htmlspecialchars($search); ?>">
             </div>
             <div class="col-md-3">
                 <label for="date_from" class="form-label form-label-custom"><i class="fas fa-calendar-alt me-1"></i> Data Inicial</label>

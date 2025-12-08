@@ -4,7 +4,7 @@ require_once 'config.php';
 header('Content-Type: application/json');
 
 requireLogin();
-if ($_SESSION['user_role'] !== 'admin') {
+if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
     echo json_encode(['success' => false, 'message' => 'Acesso negado. Apenas administradores podem excluir usuários.']);
     exit;
 }

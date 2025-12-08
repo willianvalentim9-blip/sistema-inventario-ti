@@ -34,7 +34,7 @@ try {
         $filename = 'garantias_produtos_' . date('Y-m-d_Hi') . '.csv';
         
         $sql = "
-            SELECT 
+            SELECT
                 p.id as 'ID Produto',
                 p.name as 'Nome Produto',
                 p.sku as 'SKU',
@@ -47,7 +47,7 @@ try {
             FROM products p
             LEFT JOIN warranty_templates wt ON p.warranty_template_id = wt.id
             LEFT JOIN warranty_suppliers ws ON p.warranty_supplier_id = ws.id
-            WHERE p.has_warranty = 1
+            WHERE p.has_warranty = 1 AND (p.is_deleted = FALSE OR p.is_deleted IS NULL)
             ORDER BY p.name ASC
         ";
     }
@@ -59,7 +59,7 @@ try {
         $filename = 'garantias_maquinas_' . date('Y-m-d_Hi') . '.csv';
         
         $sql = "
-            SELECT 
+            SELECT
                 rm.id as 'ID Máquina',
                 rm.serial_number as 'Serial',
                 rm.name as 'Nome Máquina',
@@ -69,6 +69,7 @@ try {
                 rm.status as 'Status',
                 rm.created_at as 'Criado em'
             FROM ready_machines rm
+            WHERE rm.has_warranty = 1 AND (rm.is_deleted = FALSE OR rm.is_deleted IS NULL)
             ORDER BY rm.name ASC
         ";
     }

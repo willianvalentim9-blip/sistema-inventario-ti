@@ -38,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_type'] = 'danger';
         } else {
             try {
-                // Verificar se já existe template com mesmo nome
-                $stmt_check = $pdo->prepare("SELECT id FROM warranty_templates WHERE name = ? COLLATE utf8mb4_general_ci");
+                // Verificar se já existe template com mesmo nome (excluindo deletados)
+                $stmt_check = $pdo->prepare("SELECT id FROM warranty_templates WHERE name = ? COLLATE utf8mb4_general_ci AND (is_deleted = FALSE OR is_deleted IS NULL)");
                 $stmt_check->execute([$template_name]);
                 $existing = $stmt_check->fetch();
 
@@ -78,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_type'] = 'danger';
         } else {
             try {
-                // Verificar se já existe outro template com mesmo nome (exceto este)
-                $stmt_check = $pdo->prepare("SELECT id FROM warranty_templates WHERE name = ? COLLATE utf8mb4_general_ci AND id != ? LIMIT 1");
+                // Verificar se já existe outro template com mesmo nome (exceto este, excluindo deletados)
+                $stmt_check = $pdo->prepare("SELECT id FROM warranty_templates WHERE name = ? COLLATE utf8mb4_general_ci AND id != ? AND (is_deleted = FALSE OR is_deleted IS NULL) LIMIT 1");
                 $stmt_check->execute([$template_name, $template_id]);
                 $existing = $stmt_check->fetch();
 
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $template_id = intval($_POST['template_id'] ?? 0);
         if ($template_id > 0) {
             try {
-                $stmt = $pdo->prepare("SELECT * FROM warranty_templates WHERE id = ?");
+                $stmt = $pdo->prepare("SELECT * FROM warranty_templates WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
                 $stmt->execute([$template_id]);
                 $original = $stmt->fetch(PDO::FETCH_ASSOC);
                 
@@ -152,46 +152,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             // Obter dados do template antes de excluir (para log)
-            $stmt_get = $pdo->prepare("SELECT name FROM warranty_templates WHERE id = ?");
+            $stmt_get = $pdo->prepare("SELECT name FROM warranty_templates WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
             $stmt_get->execute([$template_id]);
             $template_data = $stmt_get->fetch();
 
             if (!$template_data) {
-                throw new Exception('Template não encontrado');
-            }
-
-            // Verificar se template está sendo usado - CORRIGIDO: Verificar AMBAS as tabelas
-            // Produtos
-            $stmt_check = $pdo->prepare("
-                SELECT COUNT(*) as count FROM products 
-                WHERE warranty_template_id = ?
-            ");
-            $stmt_check->execute([$template_id]);
-            $usage_products = $stmt_check->fetch()['count'];
-            
-            // Máquinas (ready_machines)
-            $stmt_check = $pdo->prepare("
-                SELECT COUNT(*) as count FROM ready_machines 
-                WHERE warranty_template_id = ?
-            ");
-            $stmt_check->execute([$template_id]);
-            $usage_machines = $stmt_check->fetch()['count'];
-            
-            $total_usage = $usage_products + $usage_machines;
-
-            if ($total_usage > 0) {
-                $msg = '✗ Não é possível excluir! Este template está vinculado a ';
-                if ($usage_products > 0) $msg .= $usage_products . ' produto(s)';
-                if ($usage_machines > 0) $msg .= ($usage_products > 0 ? ' e ' : '') . $usage_machines . ' máquina(s)';
-                $_SESSION['flash_message'] = $msg . '.';
+                $_SESSION['flash_message'] = '✗ Template não encontrado ou já foi excluído';
                 $_SESSION['flash_type'] = 'warning';
                 header('Location: warranties.php?tab=templates');
                 exit;
             }
 
-            // Excluir template
-            $stmt = $pdo->prepare("DELETE FROM warranty_templates WHERE id = ?");
-            $stmt->execute([$template_id]);
+            // SOFT DELETE: Marcar como deletado
+            $stmt = $pdo->prepare("
+                UPDATE warranty_templates
+                SET is_deleted = TRUE,
+                    deleted_at = NOW(),
+                    deleted_by = ?,
+                    is_active = 0
+                WHERE id = ?
+            ");
+            $stmt->execute([$_SESSION['user_id'], $template_id]);
 
             $_SESSION['flash_message'] = '✓ Template "' . htmlspecialchars($template_data['name']) . '" excluído com sucesso!';
             $_SESSION['flash_type'] = 'success';
@@ -305,31 +286,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_type'] = 'danger';
         } else {
             try {
-                // Verificar se existem produtos associados
-                $stmt_check = $pdo->prepare("SELECT COUNT(*) as count FROM products WHERE warranty_supplier_id = ?");
-                $stmt_check->execute([$supplier_id]);
-                $count = $stmt_check->fetch()['count'];
+                // Obter dados antes de excluir
+                $stmt_get = $pdo->prepare("SELECT name FROM warranty_suppliers WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
+                $stmt_get->execute([$supplier_id]);
+                $supplier = $stmt_get->fetch();
 
-                if ($count > 0) {
-                    $_SESSION['flash_message'] = '✗ Não é possível deletar: existem ' . $count . ' produto(s) associado(s) a este fornecedor';
+                if (!$supplier) {
+                    $_SESSION['flash_message'] = '✗ Fornecedor não encontrado ou já foi excluído';
                     $_SESSION['flash_type'] = 'warning';
                 } else {
-                    // Obter nome para log
-                    $stmt_get = $pdo->prepare("SELECT name FROM warranty_suppliers WHERE id = ?");
-                    $stmt_get->execute([$supplier_id]);
-                    $supplier = $stmt_get->fetch();
                     $supplier_name = $supplier['name'] ?? 'Desconhecido';
 
-                    // Deletar fornecedor
-                    $stmt_delete = $pdo->prepare("DELETE FROM warranty_suppliers WHERE id = ?");
-                    $stmt_delete->execute([$supplier_id]);
+                    // SOFT DELETE: Marcar como deletado
+                    $stmt_delete = $pdo->prepare("
+                        UPDATE warranty_suppliers
+                        SET is_deleted = TRUE,
+                            deleted_at = NOW(),
+                            deleted_by = ?,
+                            is_active = 0
+                        WHERE id = ?
+                    ");
+                    $stmt_delete->execute([$_SESSION['user_id'], $supplier_id]);
 
-                    $_SESSION['flash_message'] = '✓ Fornecedor deletado com sucesso!';
+                    $_SESSION['flash_message'] = '✓ Fornecedor "' . htmlspecialchars($supplier_name) . '" excluído com sucesso!';
                     $_SESSION['flash_type'] = 'success';
-                    logAdminActivity($_SESSION['user_id'], 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', $supplier_id, null, ['name' => $supplier_name]);
+                    logAdminActivity($_SESSION['user_id'], 'DELETE_WARRANTY_SUPPLIER', 'warranty_suppliers', $supplier_id, ['name' => $supplier_name], null);
                 }
             } catch (PDOException $e) {
-                $_SESSION['flash_message'] = '✗ Erro ao deletar fornecedor: ' . $e->getMessage();
+                $_SESSION['flash_message'] = '✗ Erro ao excluir fornecedor: ' . $e->getMessage();
                 $_SESSION['flash_type'] = 'danger';
             }
         }
@@ -479,11 +463,23 @@ $offset = ($page - 1) * $per_page;
 
 // DADOS PARA ABA TEMPLATES
 $filter_active = $_GET['filter'] ?? 'active';
-$sql = "SELECT * FROM warranty_templates";
+
+// Obter contagens para as abas
+$stmt_count_active = $pdo->query("SELECT COUNT(*) as count FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND is_active = 1");
+$count_templates_active = $stmt_count_active->fetch()['count'];
+
+$stmt_count_inactive = $pdo->query("SELECT COUNT(*) as count FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND is_active = 0");
+$count_templates_inactive = $stmt_count_inactive->fetch()['count'];
+
+$stmt_count_all = $pdo->query("SELECT COUNT(*) as count FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL)");
+$count_templates_all = $stmt_count_all->fetch()['count'];
+
+// Query principal com filtro
+$sql = "SELECT * FROM warranty_templates WHERE (is_deleted = FALSE OR is_deleted IS NULL)";
 if ($filter_active === 'active') {
-    $sql .= " WHERE is_active = 1";
+    $sql .= " AND is_active = 1";
 } elseif ($filter_active === 'inactive') {
-    $sql .= " WHERE is_active = 0";
+    $sql .= " AND is_active = 0";
 }
 $sql .= " ORDER BY CASE WHEN is_active = 1 THEN 0 ELSE 1 END, name ASC";
 $stmt = $pdo->prepare($sql);
@@ -552,6 +548,9 @@ $machines_offset = ($machines_page - 1) * $machines_per_page;
 $machines_where_conditions = [];
 $machines_params = [];
 
+// CORRIGIDO: Filtrar apenas máquinas com garantia
+$machines_where_conditions[] = "has_warranty = 1";
+
 if (!empty($search_machines)) {
     $machines_where_conditions[] = "(name LIKE ? OR serial_number LIKE ? OR processor LIKE ?)";
     $search_machines_param = "%$search_machines%";
@@ -582,6 +581,51 @@ try {
     $machines = [];
     $total_machines = 0;
     $machines_total_pages = 0;
+}
+
+// DADOS PARA ABA ARMAZÉM
+$search_warehouse = trim($_GET['search_warehouse'] ?? '');
+$warehouse_status_filter = $_GET['warehouse_status'] ?? '';
+$warehouse_page = max(1, intval($_GET['warehouse_page'] ?? 1));
+$warehouse_per_page = 20;
+$warehouse_offset = ($warehouse_page - 1) * $warehouse_per_page;
+
+$warehouse_where_conditions = [];
+$warehouse_params = [];
+
+// Filtrar apenas itens de armazém com garantia
+$warehouse_where_conditions[] = "has_warranty = 1 AND (is_deleted = FALSE OR is_deleted IS NULL)";
+
+if (!empty($search_warehouse)) {
+    $warehouse_where_conditions[] = "(name LIKE ? OR manufacturer LIKE ? OR location LIKE ?)";
+    $search_warehouse_param = "%$search_warehouse%";
+    $warehouse_params = [$search_warehouse_param, $search_warehouse_param, $search_warehouse_param];
+}
+if (!empty($warehouse_status_filter)) {
+    $warehouse_where_conditions[] = "status = ?";
+    $warehouse_params[] = $warehouse_status_filter;
+}
+
+$warehouse_where_clause = !empty($warehouse_where_conditions) ? 'WHERE ' . implode(' AND ', $warehouse_where_conditions) : '';
+
+try {
+    $warehouse_count_sql = "SELECT COUNT(*) as total FROM warehouse $warehouse_where_clause";
+    $warehouse_count_stmt = $pdo->prepare($warehouse_count_sql);
+    $warehouse_count_stmt->execute($warehouse_params);
+    $total_warehouse = $warehouse_count_stmt->fetch()['total'];
+    $warehouse_total_pages = ceil($total_warehouse / $warehouse_per_page);
+    
+    $warehouse_sql = "SELECT * FROM warehouse $warehouse_where_clause ORDER BY name ASC LIMIT ? OFFSET ?";
+    $warehouse_stmt = $pdo->prepare($warehouse_sql);
+    $warehouse_stmt->execute(array_merge($warehouse_params, [$warehouse_per_page, $warehouse_offset]));
+    $warehouse = $warehouse_stmt->fetchAll();
+    
+    $warehouse_error = '';
+} catch (PDOException $e) {
+    $warehouse_error = 'Erro ao carregar itens do armazém: ' . $e->getMessage();
+    $warehouse = [];
+    $total_warehouse = 0;
+    $warehouse_total_pages = 0;
 }
 
 // DADOS PARA ABA HISTÓRICO
@@ -653,13 +697,18 @@ function getWarrantyStatusBadge($endDate) {
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link <?php echo $current_tab === 'suppliers' ? 'active' : ''; ?>" href="?tab=suppliers">
-                <i class="fas fa-building me-2"></i> Fornecedores
+            <a class="nav-link <?php echo $current_tab === 'machines' ? 'active' : ''; ?>" href="?tab=machines">
+                <i class="fas fa-desktop me-2"></i> Máquinas (<?php echo $total_machines; ?>)
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link <?php echo $current_tab === 'machines' ? 'active' : ''; ?>" href="?tab=machines">
-                <i class="fas fa-desktop me-2"></i> Máquinas (<?php echo $total_machines; ?>)
+            <a class="nav-link <?php echo $current_tab === 'warehouse' ? 'active' : ''; ?>" href="?tab=warehouse">
+                <i class="fas fa-warehouse me-2"></i> Armazém (<?php echo $total_warehouse; ?>)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <?php echo $current_tab === 'suppliers' ? 'active' : ''; ?>" href="?tab=suppliers">
+                <i class="fas fa-building me-2"></i> Fornecedores
             </a>
         </li>
         <li class="nav-item">
@@ -697,8 +746,8 @@ function getWarrantyStatusBadge($endDate) {
                                     Exporta: ID, Nome, SKU, Template, Fornecedor, Período, Notas
                                 </p>
                                 <small class="text-muted d-block mt-2">
-                                    📊 <?php 
-                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE has_warranty = 1");
+                                    📊 <?php
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE has_warranty = 1 AND (is_deleted = FALSE OR is_deleted IS NULL)");
                                     $count = $stmt->fetch()['total'];
                                     echo "$count registros";
                                     ?>
@@ -717,8 +766,28 @@ function getWarrantyStatusBadge($endDate) {
                                     Exporta: Nome, Serial, Processador, Memória, Storage, Status
                                 </p>
                                 <small class="text-muted d-block mt-2">
+                                    📊 <?php
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines WHERE has_warranty = 1 AND (is_deleted = FALSE OR is_deleted IS NULL)");
+                                    $count = $stmt->fetch()['total'];
+                                    echo "$count registros";
+                                    ?>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Garantias de Armazém -->
+                    <div class="col-md-6">
+                        <div class="card border-warning cursor-pointer export-card" onclick="downloadExport('warehouse')">
+                            <div class="card-body text-center">
+                                <i class="fas fa-warehouse fa-2x text-warning mb-2"></i>
+                                <h6 class="card-title">Itens do Armazém</h6>
+                                <p class="card-text small text-muted">
+                                    Exporta: Nome, Localização, Fabricante, Fornecedor, Período, Status
+                                </p>
+                                <small class="text-muted d-block mt-2">
                                     📊 <?php 
-                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines");
+                                    $stmt = $pdo->query("SELECT COUNT(*) as total FROM warehouse WHERE has_warranty = 1 AND (is_deleted = FALSE OR is_deleted IS NULL)");
                                     $count = $stmt->fetch()['total'];
                                     echo "$count registros";
                                     ?>
@@ -845,6 +914,7 @@ function getWarrantyStatusBadge($endDate) {
         <p class="text-muted">Adicione produtos com garantia ou ajuste seus filtros.</p>
     </div>
 <?php else: ?>
+
     <div class="card card-custom">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -861,16 +931,29 @@ function getWarrantyStatusBadge($endDate) {
                             <th>Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php foreach ($products as $product): 
+                    <tbody id="products-table-body">
+                        <?php foreach ($products as $product):
                             $warranty_status = getWarrantyStatusBadge($product['warranty_end_date']);
+                            $has_active_warranty = !empty($product['warranty_end_date']) && strtotime($product['warranty_end_date']) >= strtotime(date('Y-m-d'));
+                            $row_class = !$has_active_warranty ? 'warranty-inactive-row' : '';
                         ?>
-                            <tr>
+                            <tr class="product-row <?php echo $row_class; ?>"
+                                data-product-name="<?php echo htmlspecialchars(strtolower($product['name'])); ?>"
+                                data-product-category="<?php echo htmlspecialchars(strtolower($product['category'])); ?>"
+                                data-product-provider="<?php echo htmlspecialchars(strtolower($product['warranty_provider'] ?? '')); ?>"
+                                data-product-model="<?php echo htmlspecialchars(strtolower($product['model'] ?? '')); ?>">
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="product-icon me-3"><i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-2x text-primary-custom"></i></div>
                                         <div>
-                                            <h6 class="mb-0"><?php echo htmlspecialchars($product['name']); ?></h6>
+                                            <h6 class="mb-0">
+                                                <?php echo htmlspecialchars($product['name']); ?>
+                                                <?php if (!$has_active_warranty): ?>
+                                                    <span class="badge ms-2" style="background-color: #8B0000; color: #ffffff;" title="Produto sem garantia ativa" data-bs-toggle="tooltip">
+                                                        <i class="fas fa-exclamation-triangle"></i> Sem Garantia Ativa
+                                                    </span>
+                                                <?php endif; ?>
+                                            </h6>
                                             <?php if (!empty($product['model'])): ?><small class="text-muted"><?php echo htmlspecialchars($product['model']); ?></small><?php endif; ?>
                                         </div>
                                     </div>
@@ -987,16 +1070,30 @@ function getWarrantyStatusBadge($endDate) {
                             <th>Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php foreach ($machines as $machine): ?>
-                            <tr>
+                    <tbody id="machines-table-body">
+                        <?php foreach ($machines as $machine):
+                            $machine_has_active_warranty = !empty($machine['warranty_end_date']) && strtotime($machine['warranty_end_date']) >= strtotime(date('Y-m-d'));
+                            $machine_row_class = !$machine_has_active_warranty ? 'warranty-inactive-row' : '';
+                        ?>
+                            <tr class="machine-row <?php echo $machine_row_class; ?>"
+                                data-machine-name="<?php echo htmlspecialchars(strtolower($machine['name'])); ?>"
+                                data-machine-serial="<?php echo htmlspecialchars(strtolower($machine['serial_number'] ?? '')); ?>"
+                                data-machine-processor="<?php echo htmlspecialchars(strtolower($machine['processor'] ?? '')); ?>"
+                                data-machine-model="<?php echo htmlspecialchars(strtolower($machine['model'] ?? '')); ?>">
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="me-3">
                                             <i class="fas fa-laptop fa-2x text-info"></i>
                                         </div>
                                         <div>
-                                            <h6 class="mb-0"><?php echo htmlspecialchars($machine['name']); ?></h6>
+                                            <h6 class="mb-0">
+                                                <?php echo htmlspecialchars($machine['name']); ?>
+                                                <?php if (!$machine_has_active_warranty): ?>
+                                                    <span class="badge ms-2" style="background-color: #8B0000; color: #ffffff;" title="Máquina sem garantia ativa" data-bs-toggle="tooltip">
+                                                        <i class="fas fa-exclamation-triangle"></i> Sem Garantia Ativa
+                                                    </span>
+                                                <?php endif; ?>
+                                            </h6>
                                             <?php if (!empty($machine['model'])): ?>
                                                 <small class="text-muted"><?php echo htmlspecialchars($machine['model']); ?></small>
                                             <?php endif; ?>
@@ -1034,6 +1131,7 @@ function getWarrantyStatusBadge($endDate) {
                                     <div class="btn-group btn-group-sm">
                                         <button type="button" class="btn btn-outline-primary" onclick="openActionModal('view_machine.php?id=<?php echo $machine['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($machine['name'])); ?>')" title="Visualizar"><i class="fas fa-eye"></i></button>
                                         <button type="button" class="btn btn-outline-info" onclick="openActionModal('edit_warranty_machine.php?id=<?php echo $machine['id']; ?>&modal=true', 'Editar Garantia: <?php echo htmlspecialchars(addslashes($machine['name'])); ?>')" title="Editar Garantia"><i class="fas fa-shield-alt"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="openActionModal('warranty_history_view.php?id=<?php echo $machine['id']; ?>&type=machine&modal=true', 'Histórico: <?php echo htmlspecialchars(addslashes($machine['name'])); ?>')" title="Ver Histórico"><i class="fas fa-history"></i></button>
                                     </div>
                                 </td>
                             </tr>
@@ -1069,17 +1167,178 @@ function getWarrantyStatusBadge($endDate) {
     <?php endif; ?>
 <?php endif; ?>
 
+<!-- ===================================== ABA ARMAZÉM ===================================== -->
+<?php elseif ($current_tab === 'warehouse'): ?>
+
+<?php if (!empty($warehouse_error)): ?>
+    <div class="alert alert-danger" role="alert">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <?php echo htmlspecialchars($warehouse_error); ?>
+    </div>
+<?php endif; ?>
+
+<div class="card card-custom mb-4">
+    <div class="card-body">
+        <form method="GET" action="" class="row g-3">
+            <input type="hidden" name="tab" value="warehouse">
+            <div class="col-md-4">
+                <label for="search_warehouse" class="form-label form-label-custom"><i class="fas fa-search me-1"></i> Buscar</label>
+                <input type="text" class="form-control form-control-custom" id="search_warehouse" name="search_warehouse" placeholder="Nome, Fabricante, Localização..." value="<?php echo htmlspecialchars($search_warehouse); ?>">
+            </div>
+            <div class="col-md-3">
+                <label for="warehouse_status" class="form-label form-label-custom"><i class="fas fa-info-circle me-1"></i> Status</label>
+                <select class="form-select form-control-custom" id="warehouse_status" name="warehouse_status">
+                    <option value="">Todos</option>
+                    <option value="available" <?php echo $warehouse_status_filter === 'available' ? 'selected' : ''; ?>>Disponível</option>
+                    <option value="unavailable" <?php echo $warehouse_status_filter === 'unavailable' ? 'selected' : ''; ?>>Indisponível</option>
+                    <option value="reserved" <?php echo $warehouse_status_filter === 'reserved' ? 'selected' : ''; ?>>Reservado</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary-custom"><i class="fas fa-filter me-1"></i> Filtrar</button>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid">
+                    <a href="?tab=warehouse" class="btn btn-outline-secondary"><i class="fas fa-times me-1"></i> Limpar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php if (empty($warehouse)): ?>
+    <div class="text-center py-5">
+        <i class="fas fa-warehouse fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">Nenhum item do armazém com garantia encontrado</h5>
+        <p class="text-muted">Adicione itens com garantia ou ajuste seus filtros.</p>
+    </div>
+<?php else: ?>
+    <div class="card card-custom">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-header-custom">
+                        <tr>
+                            <th>Item do Armazém</th>
+                            <th>Localização</th>
+                            <th>Fornecedor Garantia</th>
+                            <th>Início</th>
+                            <th>Fim</th>
+                            <th>Status Garantia</th>
+                            <th>Status Item</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="warehouse-table-body">
+                        <?php foreach ($warehouse as $item):
+                            $warranty_status = getWarrantyStatusBadge($item['warranty_end_date']);
+                            $has_active_warranty = !empty($item['warranty_end_date']) && strtotime($item['warranty_end_date']) >= strtotime(date('Y-m-d'));
+                            $row_class = !$has_active_warranty ? 'warranty-inactive-row' : '';
+                        ?>
+                            <tr class="warehouse-row <?php echo $row_class; ?>"
+                                data-warehouse-name="<?php echo htmlspecialchars(strtolower($item['name'])); ?>"
+                                data-warehouse-location="<?php echo htmlspecialchars(strtolower($item['location'] ?? '')); ?>"
+                                data-warehouse-manufacturer="<?php echo htmlspecialchars(strtolower($item['manufacturer'] ?? '')); ?>"
+                                data-warehouse-category="<?php echo htmlspecialchars(strtolower($item['category'] ?? '')); ?>">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3">
+                                            <i class="fas fa-warehouse fa-2x text-warning"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-0">
+                                                <?php echo htmlspecialchars($item['name']); ?>
+                                                <?php if (!$has_active_warranty): ?>
+                                                    <span class="badge ms-2" style="background-color: #8B0000; color: #ffffff;" title="Item sem garantia ativa" data-bs-toggle="tooltip">
+                                                        <i class="fas fa-exclamation-triangle"></i> Sem Garantia Ativa
+                                                    </span>
+                                                <?php endif; ?>
+                                            </h6>
+                                            <?php if (!empty($item['manufacturer'])): ?>
+                                                <small class="text-muted"><?php echo htmlspecialchars($item['manufacturer']); ?></small>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><?php echo htmlspecialchars($item['location'] ?: 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($item['warranty_provider'] ?: 'N/A'); ?></td>
+                                <td><?php echo !empty($item['warranty_start_date']) ? date('d/m/Y', strtotime($item['warranty_start_date'])) : 'N/A'; ?></td>
+                                <td><?php echo !empty($item['warranty_end_date']) ? date('d/m/Y', strtotime($item['warranty_end_date'])) : 'N/A'; ?></td>
+                                <td><span class="badge <?php echo $warranty_status['class']; ?>"><?php echo $warranty_status['text']; ?></span></td>
+                                <td>
+                                    <span class="badge <?php 
+                                        $warehouse_status_classes = [
+                                            'available' => 'bg-success',
+                                            'unavailable' => 'bg-danger',
+                                            'reserved' => 'bg-warning text-dark'
+                                        ];
+                                        echo $warehouse_status_classes[$item['status']] ?? 'bg-secondary';
+                                    ?>">
+                                        <?php 
+                                            $warehouse_status_texts = [
+                                                'available' => 'Disponível',
+                                                'unavailable' => 'Indisponível',
+                                                'reserved' => 'Reservado'
+                                            ];
+                                            echo $warehouse_status_texts[$item['status']] ?? ucfirst($item['status']);
+                                        ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary" onclick="openActionModal('view_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" title="Visualizar"><i class="fas fa-eye"></i></button>
+                                        <button type="button" class="btn btn-outline-info" onclick="openActionModal('edit_warranty_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Editar Garantia: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" title="Editar Garantia"><i class="fas fa-shield-alt"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="openActionModal('warranty_history_view.php?id=<?php echo $item['id']; ?>&type=warehouse&modal=true', 'Histórico: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" title="Ver Histórico"><i class="fas fa-history"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <?php if ($warehouse_total_pages > 1): ?>
+        <nav aria-label="Paginação de armazém" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <?php if ($warehouse_page > 1): ?>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['warehouse_page' => 1])); ?>"><i class="fas fa-angle-double-left"></i></a></li>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['warehouse_page' => $warehouse_page - 1])); ?>"><i class="fas fa-angle-left"></i></a></li>
+                <?php endif; ?>
+                <?php 
+                $warehouse_start_page = max(1, $warehouse_page - 2);
+                $warehouse_end_page = min($warehouse_total_pages, $warehouse_page + 2);
+                for ($i = $warehouse_start_page; $i <= $warehouse_end_page; $i++): 
+                ?>
+                    <li class="page-item <?php echo $i === $warehouse_page ? 'active' : ''; ?>">
+                        <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['warehouse_page' => $i])); ?>"><?php echo $i; ?></a>
+                    </li>
+                <?php endfor; ?>
+                <?php if ($warehouse_page < $warehouse_total_pages): ?>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['warehouse_page' => $warehouse_page + 1])); ?>"><i class="fas fa-angle-right"></i></a></li>
+                    <li class="page-item"><a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['warehouse_page' => $warehouse_total_pages])); ?>"><i class="fas fa-angle-double-right"></i></a></li>
+                <?php endif; ?>
+            </ul>
+        </nav>
+    <?php endif; ?>
+<?php endif; ?>
+
 <!-- ===================================== ABA TEMPLATES ===================================== -->
 <?php elseif ($current_tab === 'templates'): ?>
 
-<?php if ($_SESSION['user_role'] === 'admin'): ?>
+<?php if ($_SESSION['user_role'] === 'admin' || $_SESSION['user_role'] === 'administrativo'): ?>
 
 <div class="row mb-4">
     <div class="col-md-8">
         <ul class="nav nav-tabs">
-            <li class="nav-item"><a class="nav-link <?php echo $filter_active === 'active' ? 'active' : ''; ?>" href="?tab=templates&filter=active">Ativos (<?php echo count(array_filter($templates, fn($t) => $t['is_active'])); ?>)</a></li>
-            <li class="nav-item"><a class="nav-link <?php echo $filter_active === 'inactive' ? 'active' : ''; ?>" href="?tab=templates&filter=inactive">Inativos (<?php echo count(array_filter($templates, fn($t) => !$t['is_active'])); ?>)</a></li>
-            <li class="nav-item"><a class="nav-link <?php echo $filter_active === 'all' ? 'active' : ''; ?>" href="?tab=templates&filter=all">Todos (<?php echo count($templates); ?>)</a></li>
+            <li class="nav-item"><a class="nav-link <?php echo $filter_active === 'active' ? 'active' : ''; ?>" href="?tab=templates&filter=active">Ativos (<span id="count-active"><?php echo $count_templates_active; ?></span>)</a></li>
+            <li class="nav-item"><a class="nav-link <?php echo $filter_active === 'inactive' ? 'active' : ''; ?>" href="?tab=templates&filter=inactive">Inativos (<span id="count-inactive"><?php echo $count_templates_inactive; ?></span>)</a></li>
+            <li class="nav-item"><a class="nav-link <?php echo $filter_active === 'all' ? 'active' : ''; ?>" href="?tab=templates&filter=all">Todos (<span id="count-all"><?php echo $count_templates_all; ?></span>)</a></li>
         </ul>
     </div>
     <div class="col-md-4 text-end">
@@ -1089,14 +1348,30 @@ function getWarrantyStatusBadge($endDate) {
     </div>
 </div>
 
-<div class="row">
+<!-- Busca de Templates -->
+<div class="card card-custom mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-12">
+                <label for="search_templates" class="form-label form-label-custom"><i class="fas fa-search me-1"></i> Buscar Templates</label>
+                <input type="text" class="form-control form-control-custom" id="search_templates" placeholder="Digite para buscar por nome, descrição ou fornecedor...">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row" id="templates-container">
     <?php if (empty($templates)): ?>
         <div class="col-12">
             <div class="alert alert-info"><i class="fas fa-info-circle"></i> Nenhum template encontrado</div>
         </div>
     <?php else: ?>
         <?php foreach ($templates as $template): ?>
-            <div class="col-md-6 col-lg-4 mb-3">
+            <div class="col-md-6 col-lg-4 mb-3 template-card"
+                 data-template-name="<?php echo htmlspecialchars(strtolower($template['name'])); ?>"
+                 data-template-description="<?php echo htmlspecialchars(strtolower($template['description'] ?? '')); ?>"
+                 data-template-provider="<?php echo htmlspecialchars(strtolower($template['warranty_provider'] ?? '')); ?>"
+                 data-template-active="<?php echo $template['is_active'] ? '1' : '0'; ?>">
                 <div class="card h-100 <?php echo !$template['is_active'] ? 'opacity-50' : ''; ?>">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
@@ -1286,7 +1561,7 @@ function loadEditForm(templateId) {
 <!-- ===================================== ABA FORNECEDORES ===================================== -->
 <?php elseif ($current_tab === 'suppliers'): ?>
 
-<?php if ($_SESSION['user_role'] === 'admin'): ?>
+<?php if ($_SESSION['user_role'] === 'admin' || $_SESSION['user_role'] === 'administrativo'): ?>
 
 <?php
 // GET - LISTAGEM DE FORNECEDORES
@@ -1296,7 +1571,7 @@ $search = trim($_GET['search'] ?? '');
 $per_page = 20;
 $offset = ($page - 1) * $per_page;
 
-$where = "WHERE is_active = 1";
+$where = "WHERE is_active = 1 AND (is_deleted = FALSE OR is_deleted IS NULL)";
 $params = [];
 
 if (!empty($search)) {
@@ -1331,32 +1606,27 @@ $suppliers = $stmt->fetchAll();
 <!-- Busca -->
 <div class="row mb-4">
     <div class="col-12">
-        <form method="GET" action="" class="row g-3">
-            <input type="hidden" name="tab" value="suppliers">
-            <div class="col-md-6">
-                <input type="text" name="search" class="form-control" placeholder="Buscar por nome, CNPJ ou email..." value="<?php echo htmlspecialchars($search); ?>">
+        <div class="card card-custom">
+            <div class="card-body">
+                <label for="search_suppliers" class="form-label form-label-custom"><i class="fas fa-search me-1"></i> Buscar Fornecedores</label>
+                <input type="text" id="search_suppliers" class="form-control form-control-custom" placeholder="Digite para buscar por nome, CNPJ ou email...">
             </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-1"></i> Buscar</button>
-            </div>
-            <?php if (!empty($search)): ?>
-                <div class="col-md-3">
-                    <a href="?tab=suppliers" class="btn btn-outline-secondary w-100"><i class="fas fa-times me-1"></i> Limpar</a>
-                </div>
-            <?php endif; ?>
-        </form>
+        </div>
     </div>
 </div>
 
 <!-- Grid de Cards -->
-<div class="row">
+<div class="row" id="suppliers-container">
     <?php if (empty($suppliers)): ?>
         <div class="col-12">
             <div class="alert alert-info"><i class="fas fa-info-circle"></i> Nenhum fornecedor encontrado</div>
         </div>
     <?php else: ?>
         <?php foreach ($suppliers as $supplier): ?>
-            <div class="col-md-6 col-lg-4 mb-3">
+            <div class="col-md-6 col-lg-4 mb-3 supplier-card"
+                 data-supplier-name="<?php echo htmlspecialchars(strtolower($supplier['name'])); ?>"
+                 data-supplier-cnpj="<?php echo htmlspecialchars(strtolower($supplier['cnpj'] ?? '')); ?>"
+                 data-supplier-email="<?php echo htmlspecialchars(strtolower($supplier['email'] ?? '')); ?>">
                 <div class="card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
@@ -2432,6 +2702,271 @@ style.innerHTML = `
     }
 `;
 document.head.appendChild(style);
+
+// ========================================
+// BUSCA AUTOMÁTICA EM TEMPLATES
+// ========================================
+const searchTemplates = document.getElementById('search_templates');
+if (searchTemplates) {
+    searchTemplates.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const templateCards = document.querySelectorAll('.template-card');
+        const currentFilter = new URLSearchParams(window.location.search).get('filter') || 'active';
+
+        let countActive = 0;
+        let countInactive = 0;
+        let countAll = 0;
+
+        templateCards.forEach(card => {
+            const name = card.dataset.templateName || '';
+            const description = card.dataset.templateDescription || '';
+            const provider = card.dataset.templateProvider || '';
+            const isActive = card.dataset.templateActive === '1';
+
+            const matches = name.includes(searchTerm) || description.includes(searchTerm) || provider.includes(searchTerm);
+
+            // Filtro de busca + filtro de ativo/inativo
+            let shouldShow = matches;
+            if (currentFilter === 'active') {
+                shouldShow = matches && isActive;
+            } else if (currentFilter === 'inactive') {
+                shouldShow = matches && !isActive;
+            }
+            // Se for 'all', mostra tudo que der match
+
+            card.style.display = shouldShow ? '' : 'none';
+
+            // CORRIGIDO: Conta TODOS os templates (sempre)
+            if (isActive) countActive++;
+            else countInactive++;
+        });
+
+        // CORRIGIDO: "Todos" sempre é a soma de ativos + inativos
+        countAll = countActive + countInactive;
+
+        // Atualiza contadores nas abas
+        const countActiveEl = document.getElementById('count-active');
+        const countInactiveEl = document.getElementById('count-inactive');
+        const countAllEl = document.getElementById('count-all');
+
+        if (countActiveEl) countActiveEl.textContent = countActive;
+        if (countInactiveEl) countInactiveEl.textContent = countInactive;
+        if (countAllEl) countAllEl.textContent = countAll;
+
+        // Verifica se não há resultados
+        const container = document.getElementById('templates-container');
+        const visibleCards = document.querySelectorAll('.template-card:not([style*="display: none"])');
+
+        let noResultsDiv = document.getElementById('no-results-templates');
+        if (visibleCards.length === 0) {
+            if (!noResultsDiv) {
+                noResultsDiv = document.createElement('div');
+                noResultsDiv.id = 'no-results-templates';
+                noResultsDiv.className = 'col-12';
+                noResultsDiv.innerHTML = '<div class="alert alert-warning"><i class="fas fa-search"></i> Nenhum template encontrado para "' + this.value + '"</div>';
+                container.appendChild(noResultsDiv);
+            }
+        } else {
+            if (noResultsDiv) noResultsDiv.remove();
+        }
+    });
+}
+
+// ========================================
+// BUSCA AUTOMÁTICA EM PRODUTOS
+// ========================================
+const searchProducts = document.getElementById('search');
+if (searchProducts) {
+    searchProducts.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const productRows = document.querySelectorAll('.product-row');
+        let visibleCount = 0;
+
+        productRows.forEach(row => {
+            const name = row.dataset.productName || '';
+            const category = row.dataset.productCategory || '';
+            const provider = row.dataset.productProvider || '';
+            const model = row.dataset.productModel || '';
+
+            const matches = name.includes(searchTerm) || category.includes(searchTerm) ||
+                          provider.includes(searchTerm) || model.includes(searchTerm);
+
+            row.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+
+        // Mostra mensagem se não houver resultados
+        const tbody = document.getElementById('products-table-body');
+        let noResultsRow = document.getElementById('no-results-products');
+
+        if (visibleCount === 0 && searchTerm) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'no-results-products';
+                noResultsRow.innerHTML = '<td colspan="8" class="text-center py-4"><div class="alert alert-warning m-0"><i class="fas fa-search"></i> Nenhum produto encontrado para "' + this.value + '"</div></td>';
+                tbody.appendChild(noResultsRow);
+            }
+        } else {
+            if (noResultsRow) noResultsRow.remove();
+        }
+    });
+}
+
+// ========================================
+// BUSCA AUTOMÁTICA EM MÁQUINAS
+// ========================================
+const searchMachines = document.getElementById('search_machines');
+if (searchMachines) {
+    searchMachines.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const machineRows = document.querySelectorAll('.machine-row');
+        let visibleCount = 0;
+
+        machineRows.forEach(row => {
+            const name = row.dataset.machineName || '';
+            const serial = row.dataset.machineSerial || '';
+            const processor = row.dataset.machineProcessor || '';
+            const model = row.dataset.machineModel || '';
+
+            const matches = name.includes(searchTerm) || serial.includes(searchTerm) ||
+                          processor.includes(searchTerm) || model.includes(searchTerm);
+
+            row.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+
+        // Mostra mensagem se não houver resultados
+        const tbody = document.getElementById('machines-table-body');
+        let noResultsRow = document.getElementById('no-results-machines');
+
+        if (visibleCount === 0 && searchTerm) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'no-results-machines';
+                noResultsRow.innerHTML = '<td colspan="7" class="text-center py-4"><div class="alert alert-warning m-0"><i class="fas fa-search"></i> Nenhuma máquina encontrada para "' + this.value + '"</div></td>';
+                tbody.appendChild(noResultsRow);
+            }
+        } else {
+            if (noResultsRow) noResultsRow.remove();
+        }
+    });
+}
+
+// ========================================
+// BUSCA AUTOMÁTICA EM FORNECEDORES
+// ========================================
+const searchSuppliers = document.getElementById('search_suppliers');
+if (searchSuppliers) {
+    searchSuppliers.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const supplierCards = document.querySelectorAll('.supplier-card');
+        let visibleCount = 0;
+
+        supplierCards.forEach(card => {
+            const name = card.dataset.supplierName || '';
+            const cnpj = card.dataset.supplierCnpj || '';
+            const email = card.dataset.supplierEmail || '';
+
+            const matches = name.includes(searchTerm) || cnpj.includes(searchTerm) || email.includes(searchTerm);
+
+            card.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+
+        // Mostra mensagem se não houver resultados
+        const container = document.getElementById('suppliers-container');
+        let noResultsDiv = document.getElementById('no-results-suppliers');
+
+        if (visibleCount === 0 && searchTerm) {
+            if (!noResultsDiv) {
+                noResultsDiv = document.createElement('div');
+                noResultsDiv.id = 'no-results-suppliers';
+                noResultsDiv.className = 'col-12';
+                noResultsDiv.innerHTML = '<div class="alert alert-warning"><i class="fas fa-search"></i> Nenhum fornecedor encontrado para "' + this.value + '"</div>';
+                container.appendChild(noResultsDiv);
+            }
+        } else {
+            if (noResultsDiv) noResultsDiv.remove();
+        }
+    });
+}
+</script>
+
+<style>
+/* ========================================
+   ESTILOS PARA ALERTAS DE GARANTIA INATIVA
+   ======================================== */
+
+/* Borda laranja ao redor da linha sem garantia ativa */
+.warranty-inactive-row {
+    border-left: 4px solid #ff9800 !important;
+    background-color: rgba(255, 152, 0, 0.05) !important;
+}
+
+/* Animação sutil para chamar atenção */
+@keyframes warningPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+    50% { box-shadow: 0 0 8px 2px rgba(255, 152, 0, 0.3); }
+}
+
+.warranty-inactive-row:hover {
+    background-color: rgba(255, 152, 0, 0.1) !important;
+    animation: warningPulse 2s infinite;
+}
+
+/* Badge de alerta otimizado */
+.warranty-inactive-row .badge.bg-warning {
+    font-weight: 600;
+    padding: 0.4em 0.65em;
+    font-size: 0.7rem;
+    letter-spacing: 0.3px;
+    border: 1px solid #ff9800;
+    box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2);
+}
+
+/* Ícone de alerta com animação */
+.warranty-inactive-row .badge.bg-warning i {
+    animation: warningBlink 2s infinite;
+}
+
+@keyframes warningBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Tooltips otimizados */
+.tooltip-inner {
+    background-color: #ff9800;
+    color: #000;
+    font-weight: 500;
+}
+
+.tooltip.bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #ff9800;
+}
+
+.tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #ff9800;
+}
+
+/* Modo escuro - ajustes para garantia inativa */
+.theme-dark_blue .warranty-inactive-row {
+    background-color: rgba(255, 152, 0, 0.1) !important;
+}
+
+.theme-dark_blue .warranty-inactive-row:hover {
+    background-color: rgba(255, 152, 0, 0.15) !important;
+}
+</style>
+
+<script>
+// Inicializa tooltips do Bootstrap
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
 </script>
 
 <?php include 'includes/footer.php'; ?>

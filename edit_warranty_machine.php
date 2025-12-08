@@ -25,9 +25,12 @@ if ($machine_id <= 0) {
 
 try {
     $pdo = getConnection();
-    $stmt = $pdo->prepare("SELECT id, name, serial_number, warranty_start_date, warranty_end_date, warranty_provider, warranty_notes, warranty_period_value, warranty_period_unit, warranty_template_id, warranty_client_name, warranty_ticket_number, warranty_label, invoice_number FROM ready_machines WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, name, serial_number, has_warranty, warranty_start_date, warranty_end_date, warranty_provider, warranty_notes, warranty_period_value, warranty_period_unit, warranty_template_id, warranty_client_name, warranty_ticket_number, warranty_label, invoice_number, warranty_supplier_id FROM ready_machines WHERE id = ?");
     $stmt->execute([$machine_id]);
     $machine = $stmt->fetch();
+
+    // IMPORTANTE: Guarda o estado anterior de has_warranty para decidir redirecionamento
+    $had_warranty_before = ($machine['has_warranty'] == 1);
     
     if (!$machine) {
         $error_msg = 'Máquina não encontrada.';
@@ -69,10 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $warranty_ticket_number = trim($_POST['warranty_ticket_number'] ?? '');
     $warranty_label = trim($_POST['warranty_label'] ?? '');
     $warranty_client_name = trim($_POST['warranty_client_name'] ?? '');
+    $warranty_supplier_id = !empty($_POST['warranty_supplier_id']) ? intval($_POST['warranty_supplier_id']) : null;
 
     // --- VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS ---
-    if (empty($warranty_start_date) || empty($warranty_period_value) || empty($warranty_period_unit) || empty($warranty_end_date)) {
-        $error_msg = 'Todos os campos obrigatórios devem ser preenchidos: Data Inicial, Período, Unidade e Data Final.';
+    if (empty($warranty_start_date) || empty($warranty_period_value) || empty($warranty_period_unit) || empty($warranty_end_date) || empty($warranty_client_name)) {
+        $error_msg = 'Todos os campos obrigatórios devem ser preenchidos: Cliente, Data Inicial, Período, Unidade e Data Final.';
         
         if ($is_modal) {
             header('Content-Type: application/json');
@@ -86,6 +90,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     // --- FIM VALIDAÇÃO ---
+
+    // Validação da Nota Fiscal (se não estiver vazia)
+    if (!empty($invoice_number)) {
+        $stmt = $pdo->prepare("SELECT id, name FROM ready_machines WHERE invoice_number = ? AND id != ?");
+        $stmt->execute([$invoice_number, $machine_id]);
+        $existing_machine = $stmt->fetch();
+        if ($existing_machine) {
+            $error_msg = "A Nota Fiscal '{$invoice_number}' já está em uso na máquina '{$existing_machine['name']}' (ID: {$existing_machine['id']}). Por favor, verifique os dados.";
+
+            if ($is_modal) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => $error_msg]);
+                exit();
+            }
+
+            $_SESSION['flash_message'] = $error_msg;
+            $_SESSION['flash_type'] = 'danger';
+            header('Location: edit_warranty_machine.php?id=' . $machine_id . ($is_modal ? '&modal=true' : ''));
+            exit;
+        }
+    }
 
     // Validation (Start Date > End Date)
     if ($warranty_start_date && $warranty_end_date && strtotime($warranty_start_date) > strtotime($warranty_end_date)) {
@@ -147,16 +172,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $pdo->prepare("
             UPDATE ready_machines
-            SET warranty_provider = ?, 
+            SET warranty_provider = ?,
                 invoice_number = ?,
-                warranty_start_date = ?, 
-                warranty_end_date = ?, 
-                warranty_notes = ?, 
-                warranty_period_value = ?, 
-                warranty_period_unit = ?, 
+                warranty_start_date = ?,
+                warranty_end_date = ?,
+                warranty_notes = ?,
+                warranty_period_value = ?,
+                warranty_period_unit = ?,
                 warranty_ticket_number = ?,
                 warranty_label = ?,
                 warranty_client_name = ?,
+                warranty_supplier_id = ?,
                 warranty_template_id = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
@@ -173,6 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $warranty_ticket_number,
             $warranty_label,
             $warranty_client_name,
+            $warranty_supplier_id,
             $warranty_template_id,
             $machine_id
         ]);
@@ -187,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Histórico de garantia (se tabela existir)
         if (function_exists('registerWarrantyHistory')) {
-            registerWarrantyHistory($pdo, $machine_id, 'UPDATE', $old_data, $new_data, $_SESSION["user_id"]);
+            registerWarrantyHistory($pdo, $machine_id, 'UPDATE', $old_data, $new_data, $_SESSION["user_id"], 'machine');
         }
 
         $pdo->commit();
@@ -202,8 +229,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
         }
         
-        // Redireciona de volta para a lista de garantias
-        header('Location: warranties.php?tab=machines');
+        // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
+        // Se a máquina NÃO tinha garantia antes ($had_warranty_before == false),
+        // e agora foi adicionada garantia completa, redireciona para warranties.php
+        // Caso contrário, volta para a página de origem
+
+        if (!$had_warranty_before) {
+            // Novo cadastro de garantia - vai para a página de garantias
+            header('Location: warranties.php?tab=machines');
+        } else {
+            // Atualização de garantia existente - volta para página de origem
+            $return_to = $_POST['return_to'] ?? 'ready_machines.php';
+            header('Location: ' . $return_to);
+        }
         exit();
 
     } catch (PDOException $e) {
@@ -255,7 +293,10 @@ if (isset($_SESSION['flash_message'])) {
                 </div>
                 <div class="card-body">
                     <form method="POST" action="edit_warranty_machine.php?id=<?php echo $machine['id']; ?><?php echo $is_modal ? '&modal=true' : ''; ?>" id="editWarrantyMachineForm">
-                        
+
+                        <!-- Campo hidden para retornar à página de origem -->
+                        <input type="hidden" name="return_to" value="<?php echo htmlspecialchars($_GET['return_to'] ?? $_SERVER['HTTP_REFERER'] ?? 'ready_machines.php'); ?>">
+
                         <div id="edit-warranty-error-message" class="mb-3">
                             <?php echo $form_message; ?>
                         </div>
@@ -272,21 +313,16 @@ if (isset($_SESSION['flash_message'])) {
                             <strong>ℹ️ Aviso:</strong> Os dados da garantia foram modificados. Clique em "Salvar Alterações" para confirmar.
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
-                        
-                        <!-- Período de Garantia -->
-                        <div class="alert alert-info mb-3" style="border-left: 4px solid #17a2b8;">
-                            <i class="fas fa-hourglass-end me-2"></i> <strong>Período de Cobertura</strong>
-                        </div>
 
-                        <!-- Informações do Cliente e Identificação -->
+                        <!-- Dados do Cliente e Identificação -->
                         <div class="alert alert-info mb-3" style="border-left: 4px solid #17a2b8;">
-                            <i class="fas fa-user me-2"></i> <strong>Informações do Cliente (Opcional)</strong>
+                            <i class="fas fa-user me-2"></i> <strong>Informações do Cliente</strong>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="warranty_client_name" class="form-label form-label-custom"><i class="fas fa-user me-1"></i> Nome do Cliente</label>
-                                <input type="text" class="form-control form-control-custom" id="warranty_client_name" name="warranty_client_name" placeholder="Nome completo do cliente" value="<?php echo htmlspecialchars($machine['warranty_client_name'] ?? ''); ?>">
+                                <label for="warranty_client_name" class="form-label form-label-custom"><i class="fas fa-user me-1"></i> Nome do Cliente *</label>
+                                <input type="text" class="form-control form-control-custom" id="warranty_client_name" name="warranty_client_name" placeholder="Nome completo do cliente" value="<?php echo htmlspecialchars($machine['warranty_client_name'] ?? ''); ?>" required>
                                 <small class="text-muted">Cliente proprietário da máquina com garantia</small>
                             </div>
                             <div class="col-md-6 mb-3">
@@ -302,6 +338,31 @@ if (isset($_SESSION['flash_message'])) {
                                 <input type="text" class="form-control form-control-custom" id="warranty_label" name="warranty_label" placeholder="Ex: GRT-SAMSUNG-2025-001" value="<?php echo htmlspecialchars($machine['warranty_label'] ?? ''); ?>">
                                 <small class="text-muted">Etiqueta ou código de identificação da garantia</small>
                             </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Fornecedor de Garantia -->
+                        <div class="alert alert-info mb-3" style="border-left: 4px solid #17a2b8;">
+                            <i class="fas fa-building me-2"></i> <strong>Fornecedor/Prestador de Garantia</strong>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="warranty_supplier_id" class="form-label form-label-custom"><i class="fas fa-store me-1"></i> Fornecedor Cadastrado</label>
+                                <select class="form-select form-control-custom" id="warranty_supplier_id" name="warranty_supplier_id">
+                                    <option value="">-- Selecione um fornecedor --</option>
+                                </select>
+                                <small class="text-muted">Selecione um fornecedor da base de dados</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="warranty_provider" class="form-label form-label-custom"><i class="fas fa-store me-1"></i> Fornecedor/Prestador</label>
+                                <input type="text" class="form-control form-control-custom" id="warranty_provider" name="warranty_provider" placeholder="Ex: Samsung, LG, Autorizada..." value="<?php echo htmlspecialchars($machine['warranty_provider'] ?? ''); ?>">
+                                <small class="text-muted">Nome do fornecedor ou prestador de serviço</small>
+                            </div>
+                        </div>
+
+                        <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="invoice_number" class="form-label form-label-custom"><i class="fas fa-file-invoice me-1"></i> Nota Fiscal / NF-e</label>
                                 <input type="text" class="form-control form-control-custom" id="invoice_number" name="invoice_number" placeholder="Ex: NF 123456789" value="<?php echo htmlspecialchars($machine['invoice_number'] ?? ''); ?>">
@@ -344,28 +405,6 @@ if (isset($_SESSION['flash_message'])) {
 
                         <hr class="my-4">
 
-                        <!-- Fornecedor de Garantia -->
-                        <div class="alert alert-info mb-3" style="border-left: 4px solid #17a2b8;">
-                            <i class="fas fa-building me-2"></i> <strong>Fornecedor/Prestador de Garantia</strong>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="warranty_supplier_id" class="form-label form-label-custom"><i class="fas fa-store me-1"></i> Fornecedor Cadastrado</label>
-                                <select class="form-select form-control-custom" id="warranty_supplier_id" name="warranty_supplier_id">
-                                    <option value="">-- Selecione um fornecedor --</option>
-                                </select>
-                                <small class="text-muted">Selecione um fornecedor da base de dados</small>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="warranty_provider" class="form-label form-label-custom"><i class="fas fa-store me-1"></i> Fornecedor/Prestador</label>
-                                <input type="text" class="form-control form-control-custom" id="warranty_provider" name="warranty_provider" placeholder="Ex: Samsung, LG, Autorizada..." value="<?php echo htmlspecialchars($machine['warranty_provider'] ?? ''); ?>">
-                                <small class="text-muted">Nome do fornecedor ou prestador de serviço</small>
-                            </div>
-                        </div>
-
-                        <hr class="my-4">
-
                         <!-- Observações -->
                         <div class="alert alert-info mb-3" style="border-left: 4px solid #17a2b8;">
                             <i class="fas fa-clipboard me-2"></i> <strong>Detalhes Adicionais</strong>
@@ -376,6 +415,11 @@ if (isset($_SESSION['flash_message'])) {
                             <textarea class="form-control form-control-custom" id="warranty_notes" name="warranty_notes" rows="4" placeholder="Descreva detalhes importantes, como:&#10;• Condições e limitações da cobertura&#10;• Exclusões específicas&#10;• Procedimento para acionamento&#10;• Telefone/email para contato&#10;• Observações gerais"><?php echo htmlspecialchars($machine['warranty_notes'] ?? ''); ?></textarea>
                             <small class="text-muted">Informações complementares sobre a garantia</small>
                         </div>
+
+                        <!-- ===== TEMPLATES INLINE - SEM MODAL ANINHADO ===== -->
+                        <hr class="my-4">
+                        <?php include 'warranty_template_selector_inline.php'; ?>
+                        <hr class="my-4">
 
                         <div class="d-flex justify-content-between border-top pt-3 mt-3">
                             <div>
@@ -404,16 +448,17 @@ if (!$is_modal) { include 'includes/footer.php'; }
 // DADOS ORIGINAIS PARA COMPARAÇÃO
 // ========================================
 const originalData = {
-    warranty_client_name: '<?php echo htmlspecialchars($machine['warranty_client_name'] ?? ''); ?>',
-    warranty_ticket_number: '<?php echo htmlspecialchars($machine['warranty_ticket_number'] ?? ''); ?>',
-    warranty_label: '<?php echo htmlspecialchars($machine['warranty_label'] ?? ''); ?>',
-    invoice_number: '<?php echo htmlspecialchars($machine['invoice_number'] ?? ''); ?>',
     warranty_provider: '<?php echo htmlspecialchars($machine['warranty_provider'] ?? ''); ?>',
     warranty_start_date: '<?php echo htmlspecialchars($machine['warranty_start_date'] ?? ''); ?>',
     warranty_period_value: '<?php echo htmlspecialchars($machine['warranty_period_value'] ?? ''); ?>',
     warranty_period_unit: '<?php echo htmlspecialchars($machine['warranty_period_unit'] ?? ''); ?>',
     warranty_end_date: '<?php echo htmlspecialchars($machine['warranty_end_date'] ?? ''); ?>',
-    warranty_notes: `<?php echo htmlspecialchars($machine['warranty_notes'] ?? ''); ?>`
+    warranty_notes: `<?php echo htmlspecialchars($machine['warranty_notes'] ?? ''); ?>`,
+    warranty_ticket_number: '<?php echo htmlspecialchars($machine['warranty_ticket_number'] ?? ''); ?>',
+    warranty_label: '<?php echo htmlspecialchars($machine['warranty_label'] ?? ''); ?>',
+    warranty_client_name: '<?php echo htmlspecialchars($machine['warranty_client_name'] ?? ''); ?>',
+    warranty_supplier_id: '<?php echo htmlspecialchars($machine['warranty_supplier_id'] ?? ''); ?>',
+    invoice_number: '<?php echo htmlspecialchars($machine['invoice_number'] ?? ''); ?>'
 };
 
 // ========================================
@@ -422,7 +467,7 @@ const originalData = {
 function loadSuppliers() {
     console.log('📦 Carregando fornecedores...');
     const supplierSelect = document.getElementById('warranty_supplier_id');
-    
+
     if (!supplierSelect) {
         console.warn('⚠️ Select de fornecedores não encontrado');
         return;
@@ -436,19 +481,35 @@ function loadSuppliers() {
         .then(data => {
             if (data.success && Array.isArray(data.data)) {
                 console.log('✅ Fornecedores carregados:', data.data.length);
-                
+
+                // Limpa opções anteriores
                 supplierSelect.innerHTML = '<option value="">-- Selecione um fornecedor --</option>';
-                
+
+                // Adiciona cada fornecedor como opção
                 data.data.forEach(supplier => {
                     const option = document.createElement('option');
                     option.value = supplier.id;
                     option.textContent = supplier.name;
+
+                    // Seleciona se for o fornecedor atual
+                    if (supplier.id == originalData.warranty_supplier_id) {
+                        option.selected = true;
+                    }
+
                     supplierSelect.appendChild(option);
                 });
+
+                // Se houver um fornecedor selecionado, atualiza o campo de texto
+                if (originalData.warranty_supplier_id) {
+                    supplierSelect.value = originalData.warranty_supplier_id;
+                }
+            } else {
+                console.warn('⚠️ Nenhum fornecedor encontrado ou resposta inválida');
             }
         })
         .catch(error => {
             console.error('❌ Erro ao carregar fornecedores:', error);
+            supplierSelect.innerHTML = '<option value="">Erro ao carregar fornecedores</option>';
         });
 }
 
@@ -478,38 +539,50 @@ function initializeWarrantyListeners() {
     // FUNÇÃO: Verifica se há duplicação
     // ========================================
     function checkForDuplicates() {
-        const clientNameInput = document.getElementById('warranty_client_name');
-        const ticketNumberInput = document.getElementById('warranty_ticket_number');
+        console.log('🔍 Verificando duplicatas...');
+
+        const ticketInput = document.getElementById('warranty_ticket_number');
         const labelInput = document.getElementById('warranty_label');
-        const invoiceNumberInput = document.getElementById('invoice_number');
-        
+        const clientInput = document.getElementById('warranty_client_name');
+        const supplierSelect = document.getElementById('warranty_supplier_id');
+        const invoiceInput = document.getElementById('invoice_number');
+
         const currentData = {
-            warranty_client_name: clientNameInput ? clientNameInput.value : '',
-            warranty_ticket_number: ticketNumberInput ? ticketNumberInput.value : '',
-            warranty_label: labelInput ? labelInput.value : '',
-            invoice_number: invoiceNumberInput ? invoiceNumberInput.value : '',
             warranty_provider: providerInput ? providerInput.value : '',
             warranty_start_date: startDateInput.value,
             warranty_period_value: periodValueInput.value,
             warranty_period_unit: periodUnitInput.value,
             warranty_end_date: endDateInput.value,
-            warranty_notes: notesInput ? notesInput.value : ''
+            warranty_notes: notesInput ? notesInput.value : '',
+            warranty_ticket_number: ticketInput ? ticketInput.value : '',
+            warranty_label: labelInput ? labelInput.value : '',
+            warranty_client_name: clientInput ? clientInput.value : '',
+            warranty_supplier_id: supplierSelect ? supplierSelect.value : '',
+            invoice_number: invoiceInput ? invoiceInput.value : ''
         };
 
+        // Compara com dados originais - TODOS os campos
         const isDuplicate = Object.keys(currentData).every(key => {
             return currentData[key] === originalData[key];
         });
 
         if (isDuplicate && currentData.warranty_start_date && currentData.warranty_period_value) {
-            if (duplicateAlert) duplicateAlert.classList.remove('d-none');
+            console.warn('⚠️ Dados duplicados detectados!');
+            if (duplicateAlert) {
+                duplicateAlert.classList.remove('d-none');
+            }
             if (submitBtn) {
                 submitBtn.disabled = true;
                 submitBtn.style.opacity = '0.5';
                 submitBtn.style.cursor = 'not-allowed';
+                submitBtn.title = 'Nenhuma alteração foi feita. Modifique os dados antes de salvar.';
             }
             return true;
         } else {
-            if (duplicateAlert) duplicateAlert.classList.add('d-none');
+            console.log('✅ Dados modificados detectados');
+            if (duplicateAlert) {
+                duplicateAlert.classList.add('d-none');
+            }
             if (modifiedAlert && (currentData.warranty_start_date && currentData.warranty_period_value)) {
                 modifiedAlert.classList.remove('d-none');
             }
@@ -517,6 +590,7 @@ function initializeWarrantyListeners() {
                 submitBtn.disabled = false;
                 submitBtn.style.opacity = '1';
                 submitBtn.style.cursor = 'pointer';
+                submitBtn.title = 'Salvar alterações da garantia';
             }
             return false;
         }
@@ -526,17 +600,23 @@ function initializeWarrantyListeners() {
     // FUNÇÃO: Calcula a data final automaticamente
     // ========================================
     function calculateEndDate() {
+        console.log('📅 Calculando data final...');
+
         const startDate = startDateInput.value;
         const periodValue = parseInt(periodValueInput.value) || 0;
         const periodUnit = periodUnitInput.value;
 
+        // Verifica se tem dados para calcular
         if (!startDate || periodValue <= 0 || !periodUnit) {
+            console.log('❌ Dados insuficientes para calcular');
             return;
         }
 
         try {
+            // Cria a data inicial
             const date = new Date(startDate + 'T00:00:00');
-            
+
+            // Soma o período
             if (periodUnit === 'days') {
                 date.setDate(date.getDate() + periodValue);
             } else if (periodUnit === 'months') {
@@ -545,13 +625,20 @@ function initializeWarrantyListeners() {
                 date.setFullYear(date.getFullYear() + periodValue);
             }
 
+            // Formata a data como YYYY-MM-DD
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const calculatedDate = `${year}-${month}-${day}`;
-            
+
+            // Define o valor no campo de data final
             endDateInput.value = calculatedDate;
+            console.log('✅ Data final calculada:', calculatedDate);
+
+            // Valida as datas após cálculo
             validateWarrantyDates();
+
+            // Verifica duplicatas após cálculo
             checkForDuplicates();
         } catch (error) {
             console.error('❌ Erro ao calcular data final:', error);
@@ -562,19 +649,23 @@ function initializeWarrantyListeners() {
     // FUNÇÃO: Valida as datas
     // ========================================
     function validateWarrantyDates() {
+        console.log('🔍 Validando datas...');
+
         const startDate = startDateInput.value;
         const periodValue = parseInt(periodValueInput.value) || 0;
         const periodUnit = periodUnitInput.value;
         const endDate = endDateInput.value;
 
+        // Se não tem informações, esconde aviso
         if (!startDate || !endDate || periodValue <= 0) {
             if (warningDiv) warningDiv.classList.add('d-none');
             return;
         }
 
         try {
+            // Recalcula a data final esperada
             const date = new Date(startDate + 'T00:00:00');
-            
+
             if (periodUnit === 'days') {
                 date.setDate(date.getDate() + periodValue);
             } else if (periodUnit === 'months') {
@@ -588,14 +679,17 @@ function initializeWarrantyListeners() {
             const day = String(date.getDate()).padStart(2, '0');
             const expectedEndDate = `${year}-${month}-${day}`;
 
+            // Compara com o valor inserido
             if (endDate !== expectedEndDate) {
                 if (warningDiv) {
                     const localDateStr = new Date(expectedEndDate + 'T00:00:00').toLocaleDateString('pt-BR');
                     warningDiv.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> A data final não corresponde ao período. A data calculada seria <strong>${localDateStr}</strong>.`;
                     warningDiv.classList.remove('d-none');
                 }
+                console.warn('⚠️ Data final inconsistente');
             } else {
                 if (warningDiv) warningDiv.classList.add('d-none');
+                console.log('✅ Datas consistentes');
             }
         } catch (error) {
             console.error('❌ Erro ao validar datas:', error);
@@ -605,12 +699,15 @@ function initializeWarrantyListeners() {
     // ========================================
     // ADICIONA OS EVENT LISTENERS
     // ========================================
+    console.log('📌 Adicionando event listeners...');
+
     startDateInput.addEventListener('change', calculateEndDate);
     periodValueInput.addEventListener('input', calculateEndDate);
     periodValueInput.addEventListener('change', calculateEndDate);
     periodUnitInput.addEventListener('change', calculateEndDate);
     endDateInput.addEventListener('change', validateWarrantyDates);
 
+    // Listeners para verificar duplicatas
     if (providerInput) providerInput.addEventListener('input', checkForDuplicates);
     if (notesInput) notesInput.addEventListener('input', checkForDuplicates);
     startDateInput.addEventListener('change', checkForDuplicates);
@@ -618,25 +715,46 @@ function initializeWarrantyListeners() {
     periodUnitInput.addEventListener('change', checkForDuplicates);
     endDateInput.addEventListener('change', checkForDuplicates);
 
+    // Listener para mudanças nos novos campos
+    const ticketInput = document.getElementById('warranty_ticket_number');
+    const labelInput = document.getElementById('warranty_label');
+    const clientInput = document.getElementById('warranty_client_name');
+    const supplierSelect = document.getElementById('warranty_supplier_id');
+    const invoiceInput = document.getElementById('invoice_number');
+
+    if (ticketInput) ticketInput.addEventListener('input', checkForDuplicates);
+    if (labelInput) labelInput.addEventListener('input', checkForDuplicates);
+    if (clientInput) clientInput.addEventListener('input', checkForDuplicates);
+    if (supplierSelect) supplierSelect.addEventListener('change', checkForDuplicates);
+    if (invoiceInput) invoiceInput.addEventListener('input', checkForDuplicates);
+
     // ========================================
     // INICIALIZA SE JÁ HOUVER DADOS
     // ========================================
     if (startDateInput.value && periodValueInput.value && periodUnitInput.value) {
+        console.log('📝 Inicializando com valores existentes...');
         calculateEndDate();
-        checkForDuplicates();
     }
+
+    // SEMPRE verifica duplicatas no carregamento para desabilitar o botão se necessário
+    setTimeout(() => {
+        checkForDuplicates();
+    }, 100);
+
+    console.log('✔️ Listeners de garantia inicializados com sucesso!');
 
     // ========================================
     // INTERCEPTA O SUBMIT DO FORMULÁRIO SE FOR MODAL
     // ========================================
     const form = document.getElementById('editWarrantyMachineForm');
     if (form && document.getElementById('actionModal')) {
+        console.log('🔲 Interceptando submit do formulário em modal...');
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(this);
             const actionUrl = this.action;
-            
+
             fetch(actionUrl, {
                 method: 'POST',
                 body: formData,
@@ -647,9 +765,14 @@ function initializeWarrantyListeners() {
             .then(response => response.text())
             .then(responseText => {
                 try {
+                    // Tenta fazer parse como JSON
                     const json = JSON.parse(responseText);
-                    
+
                     if (json.success) {
+                        // ✅ Sucesso! Mostra mensagem e fecha modal
+                        console.log('✅ Garantia salva com sucesso!');
+
+                        // Mostra alerta de sucesso
                         const alert = document.createElement('div');
                         alert.className = 'alert alert-success alert-dismissible fade show';
                         alert.setAttribute('role', 'alert');
@@ -659,7 +782,8 @@ function initializeWarrantyListeners() {
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         `;
                         document.getElementById('actionModalBody').prepend(alert);
-                        
+
+                        // Fecha o modal após 1.5 segundos
                         setTimeout(() => {
                             const modalElement = document.getElementById('actionModal');
                             if (modalElement) {
@@ -668,11 +792,14 @@ function initializeWarrantyListeners() {
                                     bootstrapModal.hide();
                                 }
                             }
+                            // Recarrega a página
                             location.reload();
                         }, 1500);
                     } else {
+                        // ❌ Erro retornado
+                        console.log('❌ Erro ao salvar:', json.message);
                         const modalBody = document.getElementById('actionModalBody');
-                        
+
                         const alert = document.createElement('div');
                         alert.className = 'alert alert-danger alert-dismissible fade show';
                         alert.setAttribute('role', 'alert');
@@ -684,9 +811,19 @@ function initializeWarrantyListeners() {
                         modalBody.prepend(alert);
                     }
                 } catch (e) {
+                    // Não é JSON, talvez seja HTML (erro do servidor)
                     console.error('❌ Resposta não é JSON:', e);
                     const modalBody = document.getElementById('actionModalBody');
                     modalBody.innerHTML = responseText;
+
+                    // Re-executa os scripts do novo conteúdo
+                    Array.from(modalBody.querySelectorAll("script")).forEach(oldScript => {
+                        const newScript = document.createElement("script");
+                        Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    });
+                    initializeWarrantyListeners(); // Re-inicializa listeners
                 }
             })
             .catch(error => {
@@ -701,7 +838,7 @@ function initializeWarrantyListeners() {
                 `;
                 document.getElementById('actionModalBody').prepend(alert);
             });
-            
+
             return false;
         });
     }
@@ -711,11 +848,14 @@ function initializeWarrantyListeners() {
 // EXECUTAR QUANDO PÁGINA CARREGAR
 // ========================================
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 Página carregada, inicializando...');
     loadSuppliers();
     initializeWarrantyListeners();
 });
 
+// Se o formulário já existe no DOM (carregamento dinâmico/modal)
 if (document.getElementById('editWarrantyMachineForm')) {
+    console.log('🔲 Modal detectado, inicializando imediatamente...');
     loadSuppliers();
     initializeWarrantyListeners();
 }
