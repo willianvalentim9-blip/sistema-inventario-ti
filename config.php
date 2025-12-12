@@ -1,5 +1,28 @@
 <?php
 ob_start();
+
+// ========================================
+// DEFINIÇÃO DO CAMINHO RAIZ DO SISTEMA
+// ========================================
+if (!defined('__ROOT__')) {
+    define('__ROOT__', __DIR__);
+}
+
+// Define o BASE_PATH para links funcionarem em qualquer profundidade de diretório
+if (!defined('BASE_PATH')) {
+    // Detecta automaticamente o caminho base do projeto
+    $scriptName = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+    $basePath = '/sistema5'; // Ajuste se necessário
+    define('BASE_PATH', $basePath);
+}
+
+/**
+ * Função helper para gerar URLs corretas independente da profundidade do diretório
+ */
+function url($path = '') {
+    return BASE_PATH . '/' . ltrim($path, '/');
+}
+
 // ========================================
 // ARQUIVO DE CONFIGURAÇÃO DO SISTEMA (VERSÃO CORRIGIDA COM LOGS DETALHADOS)
 // ========================================

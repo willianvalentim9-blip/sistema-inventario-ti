@@ -74,31 +74,31 @@ $logo_path = $system_settings['company_logo'] ?? '';
 
             <ul class="nav nav-pills flex-column mb-auto px-2">
                 <li class="nav-item">
-                    <a href="dashboard.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
+                    <a href="<?php echo url('dashboard.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
                         <i class="fas fa-tachometer-alt fa-fw"></i>
                         <span class="sidebar-text">Dashboard</span>
                     </a>
                 </li>
                 <li>
-                    <a href="products.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Produtos">
+                    <a href="<?php echo url('products.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Produtos">
                         <i class="fas fa-boxes fa-fw"></i>
                         <span class="sidebar-text">Produtos</span>
                     </a>
                 </li>
                 <li>
-                    <a href="ready_machines.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'ready_machines.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Máquinas">
+                    <a href="<?php echo url('ready_machines.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'ready_machines.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Máquinas">
                         <i class="fas fa-desktop fa-fw"></i>
                         <span class="sidebar-text">Máquinas</span>
                     </a>
                 </li>
                 <li>
-                    <a href="warehouse.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Armazém">
+                    <a href="<?php echo url('warehouse.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Armazém">
                         <i class="fas fa-warehouse fa-fw"></i>
                         <span class="sidebar-text">Armazém</span>
                     </a>
                 </li>
                 <li>
-                    <a href="warranties.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warranties.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Garantias">
+                    <a href="<?php echo url('warranties.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warranties.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Garantias">
                         <i class="fas fa-shield-alt fa-fw"></i>
                         <span class="sidebar-text">Garantias</span>
                     </a>
@@ -107,19 +107,19 @@ $logo_path = $system_settings['company_logo'] ?? '';
                 <hr class="sidebar-divider my-2">
                 
                 <li class="nav-item">
-                    <a href="movementations.php?type=entrada" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Entradas">
+                    <a href="<?php echo url('movementations.php?type=entrada'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Entradas">
                         <i class="fas fa-arrow-circle-down fa-fw text-success"></i>
                         <span class="sidebar-text">Entradas</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="movementations.php?type=saida" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Saídas">
+                    <a href="<?php echo url('movementations.php?type=saida'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Saídas">
                         <i class="fas fa-arrow-circle-up fa-fw text-danger"></i>
                         <span class="sidebar-text">Saídas</span>
                     </a>
                 </li>
                 <li>
-                    <a href="deleted_items.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Itens Deletados">
+                    <a href="<?php echo url('deleted_items.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Itens Deletados">
                         <i class="fas fa-trash fa-fw"></i>
                         <span class="sidebar-text">Itens Deletados</span>
                     </a>
@@ -128,7 +128,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                 <?php if (isAdmin()): ?>
                     <hr class="sidebar-divider my-2">
                     <li>
-                        <a href="users.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Usuários">
+                        <a href="<?php echo url('users.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Usuários">
                             <i class="fas fa-users fa-fw"></i>
                             <span class="sidebar-text">Usuários</span>
                         </a>
@@ -142,7 +142,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         <div class="collapse <?php echo $is_log_page_active ? 'show' : ''; ?>" id="logs-collapse">
                             <ul class="nav flex-column ms-3">
                                 <li>
-                                    <a href="modules/logs/admin_logs.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER['PHP_SELF']) == 'admin_logs.php' ? 'active' : ''; ?>">
+                                    <a href="<?php echo url('modules/logs/admin_logs.php'); ?>" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER['PHP_SELF']) == 'admin_logs.php' ? 'active' : ''; ?>">
                                         <i class="fas fa-shield-alt fa-fw"></i>
                                         <span class="sidebar-text">Sistema</span>
                                     </a>
@@ -151,7 +151,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         </div>
                     </li>
                     <li>
-                        <a href="settings.php" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Configurações">
+                        <a href="<?php echo url('settings.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Configurações">
                             <i class="fas fa-cogs fa-fw"></i>
                             <span class="sidebar-text">Configurações</span>
                         </a>
@@ -162,7 +162,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
             <hr class="text-white-50 mx-2">
             
             <div class="px-2 pb-3">
-                 <a href="logout.php" class="nav-link sidebar-link" data-bs-toggle="tooltip" data-bs-placement="right" title="Sair">
+                 <a href="<?php echo url('logout.php'); ?>" class="nav-link sidebar-link" data-bs-toggle="tooltip" data-bs-placement="right" title="Sair">
                     <i class="fas fa-sign-out-alt fa-fw"></i>
                     <span class="sidebar-text">Sair</span>
                 </a>
@@ -193,12 +193,12 @@ $logo_path = $system_settings['company_logo'] ?? '';
                             <?php echo htmlspecialchars($_SESSION["username"] ?? "Usuário"); ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
+                            <li><a class="dropdown-item" href="<?php echo url('profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
                             <?php if (isAdmin()): ?>
-                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
+                                <li><a class="dropdown-item" href="<?php echo url('settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
                             <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
+                            <li><a class="dropdown-item" href="<?php echo url('logout.php'); ?>"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
                         </ul>
                     </li>
                 </ul>
