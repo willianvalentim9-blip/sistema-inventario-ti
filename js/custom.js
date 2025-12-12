@@ -86,14 +86,92 @@ function openActionModal(url, title) {
         actionModal.show();
         
         console.log('📂 Abrindo modal...');
+
+        // ⭐️ CLEANUP: Remove listeners quando o modal fecha
+        // Primeiro remove qualquer listener anterior para evitar duplicação
+        const cleanupHandler = function() {
+            console.log('🔄 Modal fechado, limpando recursos...');
+
+            // Limpa managers de upload
+            if (window.productUploadManager && typeof window.productUploadManager.cleanup === 'function') {
+                window.productUploadManager.cleanup();
+                console.log('✅ productUploadManager limpo');
+            }
+            window.productUploadManager = null;
+
+            if (window.machineUploadManager && typeof window.machineUploadManager.cleanup === 'function') {
+                window.machineUploadManager.cleanup();
+                console.log('✅ machineUploadManager limpo');
+            }
+            window.machineUploadManager = null;
+
+            // Cleanup para modal de máquina (versão modal)
+            if (window.machineUploadManagerModal && typeof window.machineUploadManagerModal.cleanup === 'function') {
+                window.machineUploadManagerModal.cleanup();
+                console.log('✅ machineUploadManagerModal limpo');
+            }
+            window.machineUploadManagerModal = null;
+
+            if (window.warehouseUploadManager && typeof window.warehouseUploadManager.cleanup === 'function') {
+                window.warehouseUploadManager.cleanup();
+                console.log('✅ warehouseUploadManager limpo');
+            }
+            window.warehouseUploadManager = null;
+
+            // Limpa dados globais do edit_machine
+            if (window.existingComponentsData) {
+                window.existingComponentsData = null;
+                console.log('✅ existingComponentsData limpo');
+            }
+
+            // Limpa modal flag do edit_machine
+            if (window.machineModalWasOpened !== undefined) {
+                window.machineModalWasOpened = false;
+                console.log('✅ machineModalWasOpened resetado');
+            }
+
+            // Reset flags de listeners do edit_machine para permitir re-anexação
+            if (window.machineWarrantyListenerAttached !== undefined) {
+                window.machineWarrantyListenerAttached = false;
+                console.log('✅ machineWarrantyListenerAttached resetado');
+            }
+            if (window.machineEditWarrantyBtnListenerAttached !== undefined) {
+                window.machineEditWarrantyBtnListenerAttached = false;
+                console.log('✅ machineEditWarrantyBtnListenerAttached resetado');
+            }
+            if (window.machineModalCancelListenerAttached !== undefined) {
+                window.machineModalCancelListenerAttached = false;
+                console.log('✅ machineModalCancelListenerAttached resetado');
+            }
+
+            // Limpa referências de elementos DOM do edit_machine
+            window.hasWarrantyCheckbox = null;
+            window.editWarrantyBtn = null;
+            window.warrantySummaryEdit = null;
+            console.log('✅ Referências DOM do edit_machine limpas');
+        };
+
+        // Remove qualquer listener anterior
+        modalElement.removeEventListener('hidden.bs.modal', modalElement._cleanupHandler);
+        
+        // Armazena referência do handler para poder remover depois
+        modalElement._cleanupHandler = cleanupHandler;
+        
+        // Adiciona o listener com { once: true } para executar apenas uma vez
+        modalElement.addEventListener('hidden.bs.modal', cleanupHandler, { once: true });
+        
+        
     } catch (error) {
         console.error('❌ Erro ao abrir modal:', error);
         return;
     }
 
     // **A CORREÇÃO PRINCIPAL ESTÁ AQUI**
-    // Adiciona o parâmetro `modal=true` à URL para que o PHP não inclua header/footer.
-    const fetchUrl = url.includes('?') ? `${url}&modal=true` : `${url}?modal=true`;
+    // Garante que o parâmetro `modal=true` existe (apenas uma vez)
+    let fetchUrl = url;
+    if (!fetchUrl.includes('modal=true')) {
+        fetchUrl = url.includes('?') ? `${url}&modal=true` : `${url}?modal=true`;
+    }
 
     console.log('📂 Carregando conteúdo de:', fetchUrl);
 
@@ -215,7 +293,7 @@ function openDeleteModal(type, id, name) {
     switch(type) {
         case 'product': itemType = 'produto'; url = 'delete_product.php'; break;
         case 'machine': itemType = 'máquina'; url = 'delete_machine.php'; break;
-        case 'user': itemType = 'usuário'; url = 'delete_user.php'; break;
+        case 'user': itemType = 'usuário'; url = 'modules/users/delete_user.php'; break;
         case 'warehouse': itemType = 'item de warehouse'; url = 'delete_warehouse.php'; break;
         default: console.error('Tipo de exclusão desconhecido:', type); return;
     }

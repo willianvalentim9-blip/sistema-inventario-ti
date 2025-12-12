@@ -5,7 +5,7 @@
 // Esta página permite visualizar, adicionar, editar e excluir usuários do sistema
 
 // Inclui o arquivo de configuração
-require_once 'config.php';
+require_once '../../config.php';
 
 // Verifica se o usuário está logado e é admin
 requireLogin();
@@ -144,7 +144,7 @@ try {
 }
 ?>
 
-<?php include 'includes/header.php'; ?>
+<?php include '../../includes/header.php'; ?>
 
 <?php
 // Bloco para exibir mensagens de feedback (sucesso/erro)
@@ -419,7 +419,7 @@ if (isset($_SESSION["flash_message"])) {
     </div>
 </div>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>
 
 <script>
 function editUser(userId, userName) {

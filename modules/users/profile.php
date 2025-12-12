@@ -2,7 +2,7 @@
 // ========================================
 // PÁGINA DE PERFIL DO USUÁRIO (VERSÃO CORRIGIDA)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $page_title = 'Meu Perfil';
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-include 'includes/header.php';
+include '../../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -309,4 +309,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>

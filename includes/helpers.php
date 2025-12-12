@@ -128,7 +128,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                 <?php if (isAdmin()): ?>
                     <hr class="sidebar-divider my-2">
                     <li>
-                        <a href="<?php echo url('users.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Usuários">
+                        <a href="<?php echo url('modules/users/users.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Usuários">
                             <i class="fas fa-users fa-fw"></i>
                             <span class="sidebar-text">Usuários</span>
                         </a>
@@ -193,7 +193,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                             <?php echo htmlspecialchars($_SESSION["username"] ?? "Usuário"); ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="<?php echo url('profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
+                            <li><a class="dropdown-item" href="<?php echo url('modules/users/profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
                             <?php if (isAdmin()): ?>
                                 <li><a class="dropdown-item" href="<?php echo url('settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
                             <?php endif; ?>

@@ -1,5 +1,5 @@
 <?php
-require_once 'config.php';
+require_once '../../config.php';
 
 function reset_admin_user($username, $password, $email) {
     $pdo = getConnection();

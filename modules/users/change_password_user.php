@@ -1,5 +1,5 @@
 <?php
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin();
 
 $user_id = intval($_REQUEST['id'] ?? 0); 

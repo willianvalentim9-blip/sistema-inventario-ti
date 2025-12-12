@@ -2,7 +2,7 @@
 // ========================================
 // API PARA ATUALIZAÇÃO DO AVATAR (VERSÃO CORRIGIDA)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 header('Content-Type: application/json');
@@ -10,7 +10,7 @@ header('Content-Type: application/json');
 $response = ['success' => false, 'message' => 'Ocorreu um erro desconhecido.'];
 $user_id = $_SESSION['user_id'];
 $pdo = getConnection();
-$upload_dir = __DIR__ . '/uploads/avatars/';
+$upload_dir = __DIR__ . '/../../uploads/avatars/';
 
 try {
     // Busca os dados atuais do usuário

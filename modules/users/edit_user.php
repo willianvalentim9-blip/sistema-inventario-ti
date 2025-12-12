@@ -1,5 +1,5 @@
 <?php
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin();
 
 $is_modal = isset($_GET['modal']) && $_GET['modal'] === 'true';
