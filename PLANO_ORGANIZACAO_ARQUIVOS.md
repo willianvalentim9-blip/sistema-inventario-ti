@@ -5,16 +5,16 @@ Organizar todos os arquivos PHP da raiz em pastas profissionais, similar à estr
 
 ## 📊 PROGRESSO ATUAL
 
-### ✅ MÓDULOS COMPLETOS (2/14)
+### ✅ MÓDULOS COMPLETOS (3/14)
 - [x] **Barcode** - 100% Completo (2025-12-12)
 - [x] **Logs** - 100% Completo (2025-12-12) - Commits: 8a9783b (inicial) + f299a63 (finalização)
+- [x] **Users** - 100% Completo (2025-12-12) - Commit: 2f96e9a
 
 ### ⏳ EM ANDAMENTO (0/14)
 - Nenhum
 
-### 📋 PENDENTES (12/14)
-- [ ] Users (Próximo - Fase 1)
-- [ ] Movements (Fase 1)
+### 📋 PENDENTES (11/14)
+- [ ] Movements (Próximo - Fase 1)
 - [ ] Warranties
 - [ ] Warehouse
 - [ ] Machines
