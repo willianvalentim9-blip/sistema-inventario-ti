@@ -6,7 +6,7 @@
 
 // Inclui o arquivo de configuração
 require_once 'config.php';
-require_once 'includes/log_functions.php';
+require_once 'modules/logs/log_functions.php';
 
 // Se o usuário já estiver logado, redireciona para o dashboard
 if (isLoggedIn()) {

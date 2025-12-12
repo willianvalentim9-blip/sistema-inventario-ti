@@ -1,6 +1,6 @@
 <?php
 require_once 'config.php';
-require_once 'includes/log_functions.php';
+require_once 'modules/logs/log_functions.php';
 requireLogin();
 
 $response = ['success' => false, 'message' => ''];
