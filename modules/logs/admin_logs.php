@@ -5,7 +5,7 @@
 // Esta página exibe os logs de ações administrativas do sistema
 
 // Inclui o arquivo de configuração
-require_once 'config.php';
+require_once '../../config.php';
 
 // Verifica se o usuário está logado e é admin
 requireAdmin();
@@ -107,7 +107,7 @@ try {
 }
 ?>
 
-<?php include 'includes/header.php'; ?>
+<?php include '../../includes/header.php'; ?>
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2 text-primary-custom">
@@ -239,4 +239,4 @@ try {
     <?php endif; ?>
 </div>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>

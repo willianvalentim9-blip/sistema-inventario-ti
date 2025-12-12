@@ -2,7 +2,7 @@
 // Garante que os arquivos essenciais são carregados primeiro
 require_once 'config.php';
 // A função logProductInput está neste arquivo, então ele é essencial.
-require_once 'log_functions.php';
+require_once 'modules/logs/log_functions.php';
 
 // A função requireLogin() está em config.php
 requireLogin();

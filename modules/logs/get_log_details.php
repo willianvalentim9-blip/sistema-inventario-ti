@@ -2,7 +2,7 @@
 // ========================================
 // API PARA BUSCAR DETALHES DE UM LOG
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin();
 
 header('Content-Type: application/json');

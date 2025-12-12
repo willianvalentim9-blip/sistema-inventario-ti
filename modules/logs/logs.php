@@ -1,5 +1,5 @@
 <?php
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin(); // Apenas administradores podem acessar esta página
 
 $page_title = 'Logs do Sistema';
@@ -13,7 +13,7 @@ try {
     error_log("Erro ao buscar logs do sistema: " . $e->getMessage());
 }
 
-include 'includes/header.php';
+include '../../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -62,5 +62,5 @@ include 'includes/header.php';
     </div>
 </div>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>
 

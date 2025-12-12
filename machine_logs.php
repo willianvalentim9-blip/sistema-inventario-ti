@@ -144,7 +144,7 @@ function showLogDetails(logId) {
     const content = document.getElementById('logDetailsContent');
     content.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>';
     modal.show();
-    fetch('get_log_details.php?id=' + logId)
+    fetch('modules/logs/get_log_details.php?id=' + logId)
         .then(response => response.json())
         .then(data => {
             if (data.success) {

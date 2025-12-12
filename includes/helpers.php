@@ -43,11 +43,11 @@ $logo_path = $system_settings['company_logo'] ?? '';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title><?php echo isset($page_title) ? $page_title . ' - ' . ($system_settings['system_name'] ?? 'Sistema') : ($system_settings['system_name'] ?? 'Sistema'); ?></title>
-    <link rel="icon" type="image/x-icon" href="assets/images/favicon.ico">
-    <link href="CSS/bootstrap.min.css" rel="stylesheet">
-    <link href="CSS/themes.css" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="/sistema5/assets/images/favicon.ico">
+    <link href="/sistema5/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/sistema5/css/themes.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="CSS/custom-improved.css" rel="stylesheet">
+    <link href="/sistema5/css/custom-improved.css" rel="stylesheet">
 </head>
 <body class="theme-<?php echo htmlspecialchars($current_theme); ?>">
 
@@ -91,50 +91,38 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         <span class="sidebar-text">Máquinas</span>
                     </a>
                 </li>
+                <li>
+                    <a href="warehouse.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Armazém">
+                        <i class="fas fa-warehouse fa-fw"></i>
+                        <span class="sidebar-text">Armazém</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="warranties.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warranties.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Garantias">
+                        <i class="fas fa-shield-alt fa-fw"></i>
+                        <span class="sidebar-text">Garantias</span>
+                    </a>
+                </li>
                 
                 <hr class="sidebar-divider my-2">
                 
-                <?php 
-                $entrada_pages = ['product_inputs_log.php', 'machine_inputs_log.php'];
-                $saida_pages = ['product_outputs_log.php', 'machine_outputs_log.php'];
-                $is_entrada_page_active = in_array(basename($_SERVER['PHP_SELF']), $entrada_pages);
-                $is_saida_page_active = in_array(basename($_SERVER['PHP_SELF']), $saida_pages);
-                $is_movement_page_active = $is_entrada_page_active || $is_saida_page_active;
-                ?>
-                
                 <li class="nav-item">
-                    <a href="#movements-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_movement_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link <?php echo !$is_movement_page_active ? 'collapsed' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Movimentações">
-                        <i class="fas fa-exchange-alt fa-fw"></i>
-                        <span class="sidebar-text">Movimentações</span>
+                    <a href="movementations.php?type=entrada" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Entradas">
+                        <i class="fas fa-arrow-circle-down fa-fw text-success"></i>
+                        <span class="sidebar-text">Entradas</span>
                     </a>
-                    <div class="collapse <?php echo $is_movement_page_active ? 'show' : ''; ?>" id="movements-collapse">
-                        <ul class="nav flex-column ms-3">
-                            <li class="nav-item">
-                                <a href="#entradas-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_entrada_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link ps-2 <?php echo !$is_entrada_page_active ? 'collapsed' : ''; ?>">
-                                    <i class="fas fa-arrow-circle-down fa-fw text-success"></i>
-                                    <span class="sidebar-text">Entradas</span>
-                                </a>
-                                <div class="collapse <?php echo $is_entrada_page_active ? 'show' : ''; ?>" id="entradas-collapse">
-                                    <ul class="nav flex-column ms-3">
-                                        <li><a href="product_inputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "product_inputs_log.php" ? "active" : ""; ?>"><i class="fas fa-box fa-fw"></i><span class="sidebar-text">Produtos</span></a></li>
-                                        <li><a href="machine_inputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "machine_inputs_log.php" ? "active" : ""; ?>"><i class="fas fa-desktop fa-fw"></i><span class="sidebar-text">Máquinas</span></a></li>
-                                    </ul>
-                                </div>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#saidas-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_saida_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link ps-2 <?php echo !$is_saida_page_active ? 'collapsed' : ''; ?>">
-                                    <i class="fas fa-arrow-circle-up fa-fw text-danger"></i>
-                                    <span class="sidebar-text">Saídas</span>
-                                </a>
-                                <div class="collapse <?php echo $is_saida_page_active ? 'show' : ''; ?>" id="saidas-collapse">
-                                    <ul class="nav flex-column ms-3">
-                                         <li><a href="product_outputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "product_outputs_log.php" ? "active" : ""; ?>"><i class="fas fa-box fa-fw"></i><span class="sidebar-text">Produtos</span></a></li>
-                                        <li><a href="machine_outputs_log.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER["PHP_SELF"]) == "machine_outputs_log.php" ? "active" : ""; ?>"><i class="fas fa-desktop fa-fw"></i><span class="sidebar-text">Máquinas</span></a></li>
-                                    </ul>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
+                </li>
+                <li class="nav-item">
+                    <a href="movementations.php?type=saida" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Saídas">
+                        <i class="fas fa-arrow-circle-up fa-fw text-danger"></i>
+                        <span class="sidebar-text">Saídas</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="deleted_items.php" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Itens Deletados">
+                        <i class="fas fa-trash fa-fw"></i>
+                        <span class="sidebar-text">Itens Deletados</span>
+                    </a>
                 </li>
                 
                 <?php if (isAdmin()): ?>
@@ -145,7 +133,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                             <span class="sidebar-text">Usuários</span>
                         </a>
                     </li>
-                    <?php $is_log_page_active = (basename($_SERVER['PHP_SELF']) == 'admin_logs.php'); ?>
+                    <?php $is_log_page_active = (basename($_SERVER['PHP_SELF']) == 'admin_logs.php' || strpos($_SERVER['PHP_SELF'], 'modules/logs/') !== false); ?>
                     <li class="nav-item">
                         <a href="#logs-collapse" data-bs-toggle="collapse" aria-expanded="<?php echo $is_log_page_active ? 'true' : 'false'; ?>" class="nav-link sidebar-link <?php echo !$is_log_page_active ? 'collapsed' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Logs">
                             <i class="fas fa-history fa-fw"></i>
@@ -154,7 +142,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         <div class="collapse <?php echo $is_log_page_active ? 'show' : ''; ?>" id="logs-collapse">
                             <ul class="nav flex-column ms-3">
                                 <li>
-                                    <a href="admin_logs.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER['PHP_SELF']) == 'admin_logs.php' ? 'active' : ''; ?>">
+                                    <a href="modules/logs/admin_logs.php" class="nav-link sidebar-link ps-2 <?php echo basename($_SERVER['PHP_SELF']) == 'admin_logs.php' ? 'active' : ''; ?>">
                                         <i class="fas fa-shield-alt fa-fw"></i>
                                         <span class="sidebar-text">Sistema</span>
                                     </a>
@@ -194,10 +182,10 @@ $logo_path = $system_settings['company_logo'] ?? '';
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-dark d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
                             <?php
-                            $avatar_path = 'uploads/avatars/' . $user_avatar;
+                            $avatar_path = __ROOT__ . '/uploads/avatars/' . $user_avatar;
                             $avatar_exists = !empty($user_avatar) && file_exists($avatar_path);
                             if ($avatar_exists) {
-                                echo '<img src="' . htmlspecialchars($avatar_path) . '?v=' . time() . '" alt="Avatar" class="rounded-circle me-2" style="width: 24px; height: 24px; object-fit: cover;">';
+                                echo '<img src="' . htmlspecialchars(__ROOT__ . '/uploads/avatars/' . $user_avatar) . '?v=' . time() . '" alt="Avatar" class="rounded-circle me-2" style="width: 24px; height: 24px; object-fit: cover;">';
                             } else {
                                 echo '<i class="fas fa-user-circle me-2" style="font-size: 1.5rem;"></i>';
                             }
