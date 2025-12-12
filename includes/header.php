@@ -174,7 +174,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         <?php echo htmlspecialchars($_SESSION["username"] ?? "Usuário"); ?>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="<?php echo url('profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
+                        <li><a class="dropdown-item" href="<?php echo url('modules/users/profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
                         <?php if (isAdmin()): ?>
                             <li><a class="dropdown-item" href="<?php echo url('settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
                         <?php endif; ?>
