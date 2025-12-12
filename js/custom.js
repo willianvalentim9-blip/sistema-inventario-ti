@@ -2,7 +2,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Inicializa os tooltips do Bootstrap
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+        var tooltip = new bootstrap.Tooltip(tooltipTriggerEl);
+
+        // Esconde o tooltip quando o elemento é clicado (especialmente links)
+        tooltipTriggerEl.addEventListener('click', function() {
+            tooltip.hide();
+        });
+
+        return tooltip;
     });
 });
 
