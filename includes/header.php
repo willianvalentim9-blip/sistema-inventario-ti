@@ -80,7 +80,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                 <?php endif; ?>
 
                 <li class="nav-item">
-                    <a href="<?php echo url('warranties.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warranties.php' ? 'active' : ''; ?>">
+                    <a href="<?php echo url('modules/warranties/warranties.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warranties.php' ? 'active' : ''; ?>">
                         <i class="fas fa-shield-alt fa-fw animate-swing"></i>
                         <span class="sidebar-text">Garantias</span>
                     </a>
