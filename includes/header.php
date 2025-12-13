@@ -96,13 +96,13 @@ $logo_path = $system_settings['company_logo'] ?? '';
                     </a>
                     <ul class="collapse <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" ? "show" : ""; ?>" id="movementationSubmenu">
                         <li class="nav-item">
-                            <a href="<?php echo url('movementations.php?type=entrada'); ?>" class="nav-link sidebar-link ps-5 <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>">
+                            <a href="<?php echo url('modules/movements/movementations.php?type=entrada'); ?>" class="nav-link sidebar-link ps-5 <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>">
                                 <i class="fas fa-arrow-circle-down fa-fw text-success"></i>
                                 <span class="sidebar-text">Entradas</span>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a href="<?php echo url('movementations.php?type=saida'); ?>" class="nav-link sidebar-link ps-5 <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>">
+                            <a href="<?php echo url('modules/movements/movementations.php?type=saida'); ?>" class="nav-link sidebar-link ps-5 <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>">
                                 <i class="fas fa-arrow-circle-down fa-fw text-danger"></i>
                                 <span class="sidebar-text">Saídas</span>
                             </a>

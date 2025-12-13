@@ -107,13 +107,13 @@ $logo_path = $system_settings['company_logo'] ?? '';
                 <hr class="sidebar-divider my-2">
                 
                 <li class="nav-item">
-                    <a href="<?php echo url('movementations.php?type=entrada'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Entradas">
+                    <a href="<?php echo url('modules/movements/movementations.php?type=entrada'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'entrada' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Entradas">
                         <i class="fas fa-arrow-circle-down fa-fw text-success"></i>
                         <span class="sidebar-text">Entradas</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="<?php echo url('movementations.php?type=saida'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Saídas">
+                    <a href="<?php echo url('modules/movements/movementations.php?type=saida'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == "movementations.php" && ($_GET['type'] ?? '') === 'saida' ? "active" : ""; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Saídas">
                         <i class="fas fa-arrow-circle-up fa-fw text-danger"></i>
                         <span class="sidebar-text">Saídas</span>
                     </a>
