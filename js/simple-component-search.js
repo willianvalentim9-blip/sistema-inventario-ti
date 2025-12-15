@@ -28,11 +28,15 @@ if (typeof window.simpleComponentSearchLoaded !== 'undefined' && window.simpleCo
 
     // Busca produtos da categoria
     // Detecta o caminho base do projeto (ex: /sistema5/)
-    const pathParts = window.location.pathname.split('/');
-    const projectRoot = pathParts[1] ? '/' + pathParts[1] : '';
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    const projectRoot = pathParts.length > 0 ? '/' + pathParts[0] : '';
     const apiUrl = `${projectRoot}/api/get_products_by_category.php?category=${encodeURIComponent(category)}`;
-    console.log('📡 Base do projeto:', projectRoot);
-    console.log('📡 URL da API:', apiUrl);
+    console.log('🔧 DEBUG PATH:', {
+        fullPath: window.location.pathname,
+        pathParts: pathParts,
+        projectRoot: projectRoot,
+        finalUrl: apiUrl
+    });
     
     fetch(apiUrl)
         .then(response => {

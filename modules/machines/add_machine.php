@@ -625,8 +625,8 @@ $code_from_scanner = $_GET['code'] ?? '';
 </div>
 
 <script src="../../js/media-upload.js"></script>
-<script src="../../js/simple-component-search.js"></script>
-<script src="../../js/machine-components-integration.js"></script>
+<script src="../../js/simple-component-search.js?v=<?php echo time(); ?>"></script>
+<script src="../../js/machine-components-integration.js?v=<?php echo time(); ?>"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

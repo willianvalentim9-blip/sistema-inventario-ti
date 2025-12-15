@@ -877,8 +877,8 @@ if (!empty($existing_components)) {
 <script src="../../js/custom.js"></script>
 <?php endif; ?>
 
-<script src="../../js/simple-component-search.js"></script>
-<script src="../../js/machine-components-integration.js"></script>
+<script src="../../js/simple-component-search.js?v=<?php echo time(); ?>"></script>
+<script src="../../js/machine-components-integration.js?v=<?php echo time(); ?>"></script>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- SISTEMA COMPLETO COM CHIPS VISUAIS -->
