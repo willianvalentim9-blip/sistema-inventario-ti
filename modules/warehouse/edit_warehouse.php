@@ -173,11 +173,11 @@ if (!$is_modal) {
 ?>
 
 <!-- Link CSS para Media Upload -->
-<link rel="stylesheet" href="CSS/media-upload.css">
+<link rel="stylesheet" href="../../CSS/media-upload.css">
 
 <?php if ($is_modal): ?>
 <!-- Script necessário para modal (quando header não é carregado) -->
-<script src="js/media-upload.js"></script>
+<script src="../../js/media-upload.js"></script>
 <?php endif; ?>
 
 <?php if (!$is_modal): ?>

@@ -329,13 +329,13 @@ if (!empty($existing_components)) {
 ?>
 
 <!-- Link CSS para Media Upload -->
-<link rel="stylesheet" href="CSS/media-upload.css">
+<link rel="stylesheet" href="../../CSS/media-upload.css">
 <!-- Link CSS para Modal de Componentes -->
-<link rel="stylesheet" href="CSS/machine-components-modal.css">
+<link rel="stylesheet" href="../../CSS/machine-components-modal.css">
 
 <?php if ($is_modal): ?>
 <!-- Script necessário para modal (quando header não é carregado) -->
-<script src="js/media-upload.js"></script>
+<script src="../../js/media-upload.js"></script>
 <?php endif; ?>
 
 <style>
@@ -873,12 +873,12 @@ if (!empty($existing_components)) {
 
 <?php if ($is_modal): ?>
 <!-- Fallback para modal: carregar scripts essenciais -->
-<script src="js/bootstrap.bundle.min.js"></script>
-<script src="js/custom.js"></script>
+<script src="../../js/bootstrap.bundle.min.js"></script>
+<script src="../../js/custom.js"></script>
 <?php endif; ?>
 
-<script src="js/simple-component-search.js"></script>
-<script src="js/machine-components-integration.js"></script>
+<script src="../../js/simple-component-search.js"></script>
+<script src="../../js/machine-components-integration.js"></script>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- SISTEMA COMPLETO COM CHIPS VISUAIS -->

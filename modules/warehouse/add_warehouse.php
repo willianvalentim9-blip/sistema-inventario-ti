@@ -248,7 +248,7 @@ $code_from_scanner = $_GET['code'] ?? '';
 <?php include '../../includes/header.php'; ?>
 
 <!-- Link CSS para Media Upload -->
-<link rel="stylesheet" href="CSS/media-upload.css">
+<link rel="stylesheet" href="../../CSS/media-upload.css">
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2 text-primary-custom">
@@ -620,7 +620,7 @@ $code_from_scanner = $_GET['code'] ?? '';
 
 <?php include '../../includes/footer.php'; ?>
 
-<script src="js/media-upload.js"></script>
+<script src="../../js/media-upload.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
