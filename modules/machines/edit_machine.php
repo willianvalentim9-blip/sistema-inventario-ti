@@ -258,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
             if (!$had_warranty_before && $has_warranty == 1) {
                 // Novo cadastro de garantia - vai para a página de garantias
-                header('Location: warranties.php?tab=machines');
+                header('Location: ../warranties/warranties.php?tab=machines');
                 exit();
             }
 
@@ -826,7 +826,7 @@ if (!empty($existing_components)) {
                                     <strong>Com Garantia</strong>
                                 </label>
                             </div>
-                            <a href="warranties.php" class="btn btn-sm btn-outline-info" id="editMachineWarrantyBtn"
+                            <a href="../warranties/warranties.php" class="btn btn-sm btn-outline-info" id="editMachineWarrantyBtn"
                                <?php echo ($machine['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?>>
                                 <i class="fas fa-shield-alt me-1"></i>Editar Garantia
                             </a>

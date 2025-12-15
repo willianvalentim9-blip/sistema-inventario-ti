@@ -451,7 +451,7 @@ if (!$is_modal) {
                                             <strong>Com Garantia</strong>
                                         </label>
                                     </div>
-                                    <a href="warranties.php" class="btn btn-sm btn-outline-info" id="editWarehouseWarrantyBtn"
+                                    <a href="../warranties/warranties.php" class="btn btn-sm btn-outline-info" id="editWarehouseWarrantyBtn"
                                        <?php echo ($warehouse['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?>>
                                         <i class="fas fa-shield-alt me-1"></i>Editar Garantia
                                     </a>

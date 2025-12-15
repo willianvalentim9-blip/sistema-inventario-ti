@@ -151,12 +151,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['flash_type'] = 'success';
 
         // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
-        // Se NÃO tinha garantia antes e AGORA foi marcado has_warranty = 1, vai para warranties.php
+        // Se NÃO tinha garantia antes e AGORA foi marcado has_warranty = 1, vai para ../warranties/warranties.php
         // Caso contrário, volta para products.php
 
         if (!$had_warranty_before && $has_warranty == 1) {
             // Novo cadastro de garantia - vai para a página de garantias
-            header('Location: warranties.php');
+            header('Location: ../warranties/warranties.php');
             exit();
         }
 
@@ -365,7 +365,7 @@ if (!$is_modal) {
                             <strong>Com Garantia</strong>
                         </label>
                     </div>
-                    <a href="warranties.php" class="btn btn-sm btn-outline-info" id="editProductWarrantyBtn" 
+                    <a href="../warranties/warranties.php" class="btn btn-sm btn-outline-info" id="editProductWarrantyBtn" 
                        <?php echo ($product['has_warranty'] ?? 0) ? '' : 'style="display: none;"'; ?>>
                         <i class="fas fa-shield-alt me-1"></i>Editar Garantia
                     </a>
@@ -401,7 +401,7 @@ if (!$is_modal) {
 <?php 
 if (!$is_modal) { 
     // Include modal apenas quando não estiver em modo modal
-    // Senão o modal será editado em warranties.php
+    // Senão o modal será editado em ../warranties/warranties.php
     $GLOBALS['is_inside_product_form'] = true;
     include 'includes/warranty_modal_edit_inline.php'; 
     include '../../includes/footer.php'; 
