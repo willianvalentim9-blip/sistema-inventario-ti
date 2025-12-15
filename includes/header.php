@@ -64,7 +64,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                     </a>
                 </li>
                 <li>
-                    <a href="<?php echo url('ready_machines.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'ready_machines.php' ? 'active' : ''; ?>">
+                    <a href="<?php echo url('modules/machines/ready_machines.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'ready_machines.php' ? 'active' : ''; ?>">
                         <i class="fas fa-desktop fa-fw animate-bounce"></i>
                         <span class="sidebar-text">Máquinas</span>
                     </a>
