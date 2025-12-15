@@ -14,7 +14,7 @@ require '../../config.php';
 
 // Verificar autenticação
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../../login.php');
     exit;
 }
 
@@ -24,7 +24,7 @@ if ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'a
         http_response_code(403);
         exit('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Acesso negado</div>');
     }
-    header('Location: dashboard.php');
+    header('Location: ../../dashboard.php');
     exit;
 }
 

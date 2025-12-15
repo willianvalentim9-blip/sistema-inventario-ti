@@ -8,7 +8,7 @@ requireLogin();
 if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'admin')) {
     $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem acessar o armazém.';
     $_SESSION['flash_type'] = 'danger';
-    header('Location: dashboard.php');
+    header('Location: ../../dashboard.php');
     exit;
 }
 

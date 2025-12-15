@@ -10,7 +10,7 @@ require_once '../../config.php';
 // Verifica se o usuário está logado e é admin
 requireLogin();
 if ($_SESSION['user_role'] !== 'admin') {
-    header('Location: dashboard.php');
+    header('Location: ../../dashboard.php');
     exit;
 }
 

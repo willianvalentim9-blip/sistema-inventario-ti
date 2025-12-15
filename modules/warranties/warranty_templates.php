@@ -10,13 +10,13 @@ require '../../config.php';
 
 // Verificar autenticação
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../../login.php');
     exit;
 }
 
 // Verificar permissão de admin
 if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
-    header('Location: dashboard.php');
+    header('Location: ../../dashboard.php');
     exit;
 }
 
