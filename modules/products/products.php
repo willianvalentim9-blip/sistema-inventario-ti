@@ -95,7 +95,7 @@ if (isset($_SESSION["flash_message"])) {
         </div>
 
         <div class="btn-group me-2">
-            <a href="scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
+            <a href="../../scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
         </div>
 
         <div class="btn-group">
