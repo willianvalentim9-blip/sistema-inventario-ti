@@ -80,7 +80,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                     </a>
                 </li>
                 <li>
-                    <a href="<?php echo url('products.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Produtos">
+                    <a href="<?php echo url('modules/products/products.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Produtos">
                         <i class="fas fa-boxes fa-fw"></i>
                         <span class="sidebar-text">Produtos</span>
                     </a>
