@@ -72,7 +72,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
 
                 <?php if (isset($_SESSION['user_role']) && ($_SESSION['user_role'] === 'administrativo' || $_SESSION['user_role'] === 'admin')): ?>
                 <li>
-                    <a href="<?php echo url('warehouse.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>">
+                    <a href="<?php echo url('modules/warehouse/warehouse.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>">
                         <i class="fas fa-boxes-stacked fa-fw animate-float"></i>
                         <span class="sidebar-text">Armazém</span>
                     </a>

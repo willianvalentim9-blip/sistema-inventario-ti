@@ -92,7 +92,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                     </a>
                 </li>
                 <li>
-                    <a href="<?php echo url('warehouse.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Armazém">
+                    <a href="<?php echo url('modules/warehouse/warehouse.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'warehouse.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Armazém">
                         <i class="fas fa-warehouse fa-fw"></i>
                         <span class="sidebar-text">Armazém</span>
                     </a>

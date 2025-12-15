@@ -1,6 +1,6 @@
 <?php
 // Redirect automático para o novo local do arquivo
 $query = $_SERVER['QUERY_STRING'] ?? '';
-$location = 'modules/warehouse/give_warehouse_stock_in.php' . ($query ? '?' . $query : '');
+$location = 'modules/warehouse/warehouse.php' . ($query ? '?' . $query : '');
 header('Location: ' . $location);
 exit();
