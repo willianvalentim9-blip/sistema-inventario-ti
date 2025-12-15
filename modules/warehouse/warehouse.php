@@ -166,7 +166,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                 <td><div class="btn-group btn-group-sm">
                     <button type="button" class="btn btn-outline-primary" onclick="openActionModal('view_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Visualizar"><i class="fas fa-eye"></i></button>
                     <button type="button" class="btn btn-outline-secondary" onclick="openActionModal('edit_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Editar: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Editar"><i class="fas fa-edit"></i></button>
-                    <a href="modules/barcode/barcode_print.php?warehouse_id=<?php echo $item['id']; ?>" class="btn btn-outline-info" data-bs-toggle="tooltip" title="Imprimir Código de Barras" target="_blank"><i class="fas fa-barcode"></i></a>
+                    <a href="../barcode/barcode_print.php?warehouse_id=<?php echo $item['id']; ?>" class="btn btn-outline-info" data-bs-toggle="tooltip" title="Imprimir Código de Barras" target="_blank"><i class="fas fa-barcode"></i></a>
                     <button type="button" class="btn btn-outline-success" onclick="openWarehouseStockInModal(<?php echo $item['id']; ?>, '<?php echo htmlspecialchars(addslashes($item['name'])); ?>', <?php echo $item['quantity']; ?>, <?php echo $item['max_quantity'] ?? 0; ?>)" data-bs-toggle="tooltip" title="Dar Entrada"><i class="fas fa-plus-circle"></i></button>
                     <button type="button" class="btn btn-outline-warning" onclick="openWarehouseStockOutModal(<?php echo $item['id']; ?>, '<?php echo htmlspecialchars(addslashes($item['name'])); ?>', <?php echo $item['quantity']; ?>)" data-bs-toggle="tooltip" title="Dar Baixa"><i class="fas fa-minus-circle"></i></button>
                     <button type="button" class="btn btn-outline-danger" onclick="openDeleteModal('warehouse', <?php echo $item['id']; ?>, '<?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Excluir"><i class="fas fa-trash"></i></button>
@@ -294,7 +294,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                                     data-bs-toggle="tooltip" title="Dar Entrada">
                                 <i class="fas fa-plus-circle"></i>
                             </button>
-                            <a href="modules/barcode/barcode_print.php?warehouse_id=<?php echo $item['id']; ?>"
+                            <a href="../barcode/barcode_print.php?warehouse_id=<?php echo $item['id']; ?>"
                                class="btn btn-outline-info"
                                target="_blank"
                                data-bs-toggle="tooltip" title="Código de Barras">
