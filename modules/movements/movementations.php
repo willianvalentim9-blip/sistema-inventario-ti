@@ -394,11 +394,11 @@ include '../../includes/header.php';
                     </td>
                     <td>
                         <?php if ($item_type === 'maquina'): ?>
-                            <a href="machine_history_view.php?id=<?php echo $mov['machine_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
+                            <a href="../machines/machine_history_view.php?id=<?php echo $mov['machine_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
                                 <i class="fas fa-history"></i>
                             </a>
                         <?php else: ?>
-                            <a href="product_history_view.php?id=<?php echo $mov['product_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
+                            <a href="../products/product_history_view.php?id=<?php echo $mov['product_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
                                 <i class="fas fa-history"></i>
                             </a>
                         <?php endif; ?>

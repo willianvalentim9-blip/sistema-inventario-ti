@@ -219,7 +219,7 @@ include '../../includes/header.php';
                                 <small><?php echo htmlspecialchars($mov['full_name'] ?? $mov['username'] ?? 'Sistema'); ?></small>
                             </td>
                             <td>
-                                <a href="product_history_view.php?id=<?php echo $mov['product_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
+                                <a href="../products/product_history_view.php?id=<?php echo $mov['product_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
                                     <i class="fas fa-history"></i>
                                 </a>
                             </td>
