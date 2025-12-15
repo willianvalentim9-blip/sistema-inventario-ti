@@ -189,21 +189,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Salva os componentes da máquina se houver
                 if (!empty($machine_components_json) && $machine_components_json !== '{}') {
                     try {
+                        error_log("🔵 DEBUG: Iniciando saveMachineComponents para máquina {$machine_id}");
                         saveMachineComponents($pdo, $machine_id, $machine_components_json);
-                        
+                        error_log("🔵 DEBUG: saveMachineComponents concluído");
+
                         // Deduz o stock dos produtos utilizados
+                        error_log("🔵 DEBUG: Iniciando deductProductsStock para máquina {$machine_id}");
                         deductProductsStock($pdo, $machine_id, 1);
-                        
-                        logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS', 'machine_products', $machine_id, 
+                        error_log("🔵 DEBUG: deductProductsStock concluído");
+
+                        logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS', 'machine_products', $machine_id,
                             'Machine ' . $machine_id . ' linked with components');
+
+                        $_SESSION['success_message'] = 'Máquina criada com sucesso! Componentes vinculados e estoque deduzido.';
                     } catch (Exception $e) {
                         // Registra erro mas não impede a criação da máquina
-                        error_log("Erro ao salvar componentes da máquina: " . $e->getMessage());
-                        logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS_ERROR', 'machine_products', $machine_id, 
+                        error_log("❌ ERRO ao salvar componentes da máquina: " . $e->getMessage());
+                        error_log("❌ Stack trace: " . $e->getTraceAsString());
+                        logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS_ERROR', 'machine_products', $machine_id,
                             'Error: ' . $e->getMessage());
+
+                        $_SESSION['error_message'] = 'ATENÇÃO: Máquina criada, mas houve erro ao vincular componentes: ' . $e->getMessage();
                     }
+                } else {
+                    error_log("⚠️ DEBUG: Nenhum componente para salvar (JSON vazio ou inválido)");
+                    error_log("⚠️ machine_components_json = " . var_export($machine_components_json, true));
                 }
-                
+
                 header("Location: ready_machines.php");
                 exit();
             }

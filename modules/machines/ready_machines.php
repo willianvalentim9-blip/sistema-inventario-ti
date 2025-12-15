@@ -7,6 +7,18 @@ requireLogin();
 
 $page_title = 'Máquinas';
 
+// Mensagens de sessão (para debug de componentes)
+$session_error = '';
+$session_success = '';
+if (isset($_SESSION['error_message'])) {
+    $session_error = $_SESSION['error_message'];
+    unset($_SESSION['error_message']);
+}
+if (isset($_SESSION['success_message'])) {
+    $session_success = $_SESSION['success_message'];
+    unset($_SESSION['success_message']);
+}
+
 // Parâmetros de busca e filtros
 $search = trim($_GET['search'] ?? '');
 $status_filter = $_GET['status'] ?? '';
@@ -85,7 +97,7 @@ function getQuantityBadgeClass($quantity) { if ($quantity <= 0) return 'bg-dange
 if (isset($_SESSION["flash_message"])) {
     $alert_type = $_SESSION["flash_type"] ?? 'info';
     $icon = $alert_type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle';
-    echo 
+    echo
     '<div class="alert alert-' . htmlspecialchars($alert_type) . ' alert-dismissible fade show" role="alert">
         <i class="fas ' . $icon . ' me-2"></i>
         ' . htmlspecialchars($_SESSION["flash_message"]) . '
@@ -93,6 +105,22 @@ if (isset($_SESSION["flash_message"])) {
     </div>';
     unset($_SESSION["flash_message"]);
     unset($_SESSION["flash_type"]);
+}
+
+// Mensagens de debug de componentes
+if (!empty($session_error)) {
+    echo '<div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        ' . htmlspecialchars($session_error) . '
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>';
+}
+if (!empty($session_success)) {
+    echo '<div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="fas fa-check-circle me-2"></i>
+        ' . htmlspecialchars($session_success) . '
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>';
 }
 ?>
 
