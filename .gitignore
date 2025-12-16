@@ -6,3 +6,8 @@ assets/uploads/**/*.jpg
 assets/uploads/**/*.jpeg
 
 backups/**/*.sql
+
+# Configurações locais e temporários
+.claude/
+_backup_organizacao/
+nul
