@@ -7,6 +7,16 @@
 require_once '../../config.php';
 require_once '../../includes/machine_components_functions.php';
 
+// 🔧 DEBUG: Força logs em arquivo local
+$debug_log_file = __DIR__ . '/../../debug_components.log';
+
+function debug_log($message) {
+    global $debug_log_file;
+    $timestamp = date('Y-m-d H:i:s');
+    file_put_contents($debug_log_file, "[{$timestamp}] {$message}\n", FILE_APPEND);
+    error_log($message); // Também envia para error_log normal
+}
+
 // Verifica se o usuário está logado
 requireLogin();
 
@@ -72,7 +82,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $warranty_period_value = !empty($_POST['machine_warranty_period_value']) ? intval($_POST['machine_warranty_period_value']) : null;
     $warranty_period_unit = trim($_POST['machine_warranty_period_unit'] ?? '');
     $machine_components_json = trim($_POST['machine_components'] ?? '{}'); // NOVO - Componentes selecionados
-    
+
+    // 🔵 DEBUG: Verificar se JSON de componentes chegou do formulário
+    debug_log("═══════════════════════════════════════════════════════════");
+    debug_log("🔵 DEBUG POST: machine_components recebido");
+    debug_log("Valor bruto do POST['machine_components']: " . var_export($_POST['machine_components'] ?? 'NÃO DEFINIDO', true));
+    debug_log("Valor após trim: " . var_export($machine_components_json, true));
+    debug_log("Está vazio? " . (empty($machine_components_json) ? 'SIM' : 'NÃO'));
+    debug_log("É igual a '{}'? " . ($machine_components_json === '{}' ? 'SIM' : 'NÃO'));
+    debug_log("═══════════════════════════════════════════════════════════");
+
     // Validação básica
     if (empty($name)) {
         $error_message = 'O nome da máquina é obrigatório.';
@@ -189,14 +208,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Salva os componentes da máquina se houver
                 if (!empty($machine_components_json) && $machine_components_json !== '{}') {
                     try {
-                        error_log("🔵 DEBUG: Iniciando saveMachineComponents para máquina {$machine_id}");
+                        debug_log("🔵 DEBUG: Iniciando saveMachineComponents para máquina {$machine_id}");
                         saveMachineComponents($pdo, $machine_id, $machine_components_json);
-                        error_log("🔵 DEBUG: saveMachineComponents concluído");
+                        debug_log("🔵 DEBUG: saveMachineComponents concluído");
 
                         // Deduz o stock dos produtos utilizados
-                        error_log("🔵 DEBUG: Iniciando deductProductsStock para máquina {$machine_id}");
+                        debug_log("🔵 DEBUG: Iniciando deductProductsStock para máquina {$machine_id}");
                         deductProductsStock($pdo, $machine_id, 1);
-                        error_log("🔵 DEBUG: deductProductsStock concluído");
+                        debug_log("🔵 DEBUG: deductProductsStock concluído");
 
                         logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS', 'machine_products', $machine_id,
                             'Machine ' . $machine_id . ' linked with components');
@@ -204,16 +223,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['success_message'] = 'Máquina criada com sucesso! Componentes vinculados e estoque deduzido.';
                     } catch (Exception $e) {
                         // Registra erro mas não impede a criação da máquina
-                        error_log("❌ ERRO ao salvar componentes da máquina: " . $e->getMessage());
-                        error_log("❌ Stack trace: " . $e->getTraceAsString());
+                        debug_log("❌ ERRO ao salvar componentes da máquina: " . $e->getMessage());
+                        debug_log("❌ Stack trace: " . $e->getTraceAsString());
                         logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS_ERROR', 'machine_products', $machine_id,
                             'Error: ' . $e->getMessage());
 
                         $_SESSION['error_message'] = 'ATENÇÃO: Máquina criada, mas houve erro ao vincular componentes: ' . $e->getMessage();
                     }
                 } else {
-                    error_log("⚠️ DEBUG: Nenhum componente para salvar (JSON vazio ou inválido)");
-                    error_log("⚠️ machine_components_json = " . var_export($machine_components_json, true));
+                    debug_log("⚠️ DEBUG: Nenhum componente para salvar (JSON vazio ou inválido)");
+                    debug_log("⚠️ machine_components_json = " . var_export($machine_components_json, true));
                 }
 
                 header("Location: ready_machines.php");
