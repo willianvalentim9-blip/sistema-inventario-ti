@@ -6,7 +6,7 @@
  * URL: http://localhost/sistema4/setup_warranty_machines.php
  */
 
-require_once 'config.php';
+require_once '../../config.php';
 
 // Verificar autenticação (apenas para segurança)
 session_start();

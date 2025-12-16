@@ -2,7 +2,7 @@
 // ========================================
 // FORMULÁRIO DE BAIXA DE ESTOQUE (PARA MODAL)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $product_id = intval($_GET['id'] ?? 0);

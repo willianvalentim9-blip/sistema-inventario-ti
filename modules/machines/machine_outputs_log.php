@@ -2,7 +2,7 @@
 // ========================================
 // PÁGINA DE LOG DE SAÍDA DE MÁQUINAS
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $page_title = 'Histórico de Saídas de Máquinas';

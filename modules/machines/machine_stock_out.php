@@ -2,7 +2,7 @@
 // ========================================
 // FORMULÁRIO DE BAIXA DE MÁQUINA (COM QUANTIDADE)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $machine_id = intval($_GET['id'] ?? 0);

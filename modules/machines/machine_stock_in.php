@@ -2,7 +2,7 @@
 // ========================================
 // FORMULÁRIO DE ENTRADA DE ESTOQUE DE MÁQUINA (PARA MODAL)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $machine_id = intval($_GET['id'] ?? 0);

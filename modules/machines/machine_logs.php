@@ -2,7 +2,7 @@
 // ========================================
 // PÁGINA DE LOGS DE MÁQUINAS
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin();
 
 $page_title = 'Logs de Máquinas';

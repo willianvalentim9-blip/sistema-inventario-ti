@@ -2,7 +2,7 @@
 // ========================================
 // PÁGINA DE LOG DE ENTRADA DE MÁQUINAS (VERSÃO CORRIGIDA)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $page_title = 'Histórico de Entradas de Máquinas';

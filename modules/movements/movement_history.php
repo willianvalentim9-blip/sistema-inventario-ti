@@ -5,7 +5,7 @@
 // Esta página exibe o histórico completo de movimentações de produtos
 
 // Inclui o arquivo de configuração
-require_once 'config.php';
+require_once '../../config.php';
 
 // Verifica se o usuário está logado
 requireLogin();

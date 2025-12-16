@@ -2,7 +2,7 @@
 // ========================================
 // PÁGINA DE LISTAGEM DE SAÍDA DE MÁQUINAS
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $page_title = 'Saída de Máquinas';

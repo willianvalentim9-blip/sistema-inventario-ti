@@ -1,11 +1,11 @@
 <?php
 // ========================================
-// PÁGINA DE LISTAGEM DE LOGS DE PRODUTOS
+// PÁGINA DE LISTAGEM DE SAÍDA DE PRODUTOS
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
-$page_title = 'Logs de Produtos';
+$page_title = 'Saída de Produtos';
 
 $search = trim($_GET['search'] ?? '');
 $page = max(1, intval($_GET['page'] ?? 1));
@@ -15,13 +15,11 @@ $offset = ($page - 1) * $per_page;
 try {
     $pdo = getConnection();
 
-    $where_conditions = [];
+    $where_conditions = ["pm.movement_type = 'saida'"];
     $params = [];
 
     if (!empty($search)) {
-        $where_conditions[] = "p.name LIKE ? OR pm.movement_type LIKE ? OR pm.reason LIKE ?";
-        $params[] = "%{$search}%";
-        $params[] = "%{$search}%";
+        $where_conditions[] = "p.name LIKE ?";
         $params[] = "%{$search}%";
     }
 
@@ -35,7 +33,7 @@ try {
 
     $movements_query = "
         SELECT 
-            pm.id, pm.movement_type, pm.quantity, pm.previous_quantity, pm.new_quantity, pm.reason, pm.created_at,
+            pm.id, pm.quantity, pm.reason, pm.created_at,
             p.name as product_name, p.category, u.username
         FROM product_movements pm
         LEFT JOIN products p ON pm.product_id = p.id
@@ -50,7 +48,7 @@ try {
     $movements = $movements_stmt->fetchAll();
 
 } catch (PDOException $e) {
-    error_log("Erro ao carregar logs de produtos: " . $e->getMessage());
+    error_log("Erro ao carregar dados de saída de produtos: " . $e->getMessage());
     $movements = [];
     $total_records = 0;
     $total_pages = 0;
@@ -61,8 +59,8 @@ try {
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2 text-primary-custom">
-        <i class="fas fa-history me-2"></i>
-        Logs de Produtos
+        <i class="fas fa-minus-circle me-2"></i>
+        Saídas de Produtos
     </h1>
 </div>
 
@@ -72,13 +70,13 @@ try {
             <div class="col-md-9">
                 <label for="search" class="form-label form-label-custom">
                     <i class="fas fa-search me-1"></i>
-                    Buscar Log
+                    Buscar Produto
                 </label>
                 <input type="text"
                        class="form-control form-control-custom"
                        id="search"
                        name="search"
-                       placeholder="Nome do produto, tipo de movimento, motivo..."
+                       placeholder="Nome do produto..."
                        value="<?php echo htmlspecialchars($search); ?>">
             </div>
             <div class="col-md-3">
@@ -98,7 +96,7 @@ try {
     <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
         <span>
             <i class="fas fa-list me-2"></i>
-            Registros de Logs de Produtos (<?php echo number_format($total_records); ?>)
+            Registros de Saída (<?php echo number_format($total_records); ?>)
         </span>
         <?php if ($total_pages > 1): ?>
             <small class="text-muted">Página <?php echo $page; ?> de <?php echo $total_pages; ?></small>
@@ -108,7 +106,7 @@ try {
         <?php if (empty($movements)): ?>
             <div class="text-center text-muted py-5">
                 <i class="fas fa-inbox fa-3x mb-3"></i>
-                <p>Nenhum log de produto encontrado.</p>
+                <p>Nenhuma saída de produto encontrada.</p>
             </div>
         <?php else: ?>
             <div class="table-responsive">
@@ -117,11 +115,8 @@ try {
                         <tr>
                             <th>Data/Hora</th>
                             <th>Produto</th>
-                            <th>Tipo</th>
-                            <th>Qtd.</th>
-                            <th>Qtd. Anterior</th>
-                            <th>Qtd. Nova</th>
-                            <th>Motivo/Detalhes</th>
+                            <th>Quantidade</th>
+                            <th>Motivo/Observação</th>
                             <th>Usuário</th>
                         </tr>
                     </thead>
@@ -133,10 +128,7 @@ try {
                                     <strong><?php echo htmlspecialchars($movement['product_name']); ?></strong>
                                     <br><small class="text-muted"><?php echo htmlspecialchars($movement['category']); ?></small>
                                 </td>
-                                <td><span class="badge bg-primary"><?php echo htmlspecialchars(ucfirst($movement['movement_type'])); ?></span></td>
-                                <td><?php echo number_format($movement['quantity']); ?></td>
-                                <td><?php echo number_format($movement['previous_quantity']); ?></td>
-                                <td><?php echo number_format($movement['new_quantity']); ?></td>
+                                <td><span class="badge bg-danger"><?php echo number_format($movement['quantity']); ?></span></td>
                                 <td><small><?php echo htmlspecialchars($movement['reason'] ?? 'N/A'); ?></small></td>
                                 <td><small><?php echo htmlspecialchars($movement['username'] ?? 'Sistema'); ?></small></td>
                             </tr>
@@ -166,5 +158,3 @@ try {
 </div>
 
 <?php include 'includes/footer.php'; ?>
-
-
