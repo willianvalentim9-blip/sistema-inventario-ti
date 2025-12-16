@@ -5,7 +5,7 @@
 session_start();
 
 // Carregar configurações se existir
-$config_path = __DIR__ . '/../config.php';
+$config_path = __DIR__ . '/../../config.php';
 $has_config = file_exists($config_path);
 if ($has_config) {
     require_once $config_path;
@@ -193,8 +193,8 @@ $current_test = isset($diagnosticos[$current]) ? $diagnosticos[$current] : null;
                     <hr class="my-4">
 
                     <div class="text-center">
-                        <a href="../dashboard.php" class="btn btn-outline-primary me-2">
-                            <i class="fas fa-arrow-left me-2"></i>Voltar ao Dashboard
+                        <a href="../../settings.php" class="btn btn-outline-primary me-2">
+                            <i class="fas fa-arrow-left me-2"></i>Voltar às Configurações
                         </a>
                         <a href="?test=all" class="btn btn-primary">
                             <i class="fas fa-tasks me-2"></i>Executar Todos os Testes

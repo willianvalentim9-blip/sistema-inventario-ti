@@ -159,7 +159,7 @@ $all_ok = true;
     </tr>
     <tr>
         <td><strong>Pasta do Sistema</strong></td>
-        <td><code><?php echo realpath(__DIR__ . '/..'); ?></code></td>
+        <td><code><?php echo realpath(__DIR__ . '/../..'); ?></code></td>
     </tr>
     <tr>
         <td><strong>Pasta de Diagnóstico</strong></td>

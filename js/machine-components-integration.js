@@ -6,47 +6,48 @@
  */
 
 // Previne carregamento duplicado
-if (typeof window.machineComponentsIntegrationLoaded !== 'undefined') {
+if (typeof window.machineComponentsIntegrationLoaded !== 'undefined' && window.machineComponentsIntegrationLoaded === true) {
     console.warn('⚠️ machine-components-integration.js já foi carregado, ignorando duplicata');
-    throw new Error('Script já carregado');
-}
+    // Retorna imediatamente sem executar o resto do script
+    // As funções já carregadas continuam disponíveis
+} else {
+    // Marca como carregado
+    window.machineComponentsIntegrationLoaded = true;
+    console.log('✅ machine-components-integration.js carregado');
 
-window.machineComponentsIntegrationLoaded = true;
-console.log('✅ machine-components-integration.js carregado');
-
-/**
- * Aguarda o carregamento de simple-component-search.js
- */
-function waitForSearchComponent(callback, attempts = 0) {
-    if (typeof searchComponent !== 'undefined') {
-        console.log('✅ searchComponent disponível, inicializando...');
-        callback();
-    } else if (attempts < 30) {
-        // Aguarda até 3 segundos
-        setTimeout(() => {
-            waitForSearchComponent(callback, attempts + 1);
-        }, 100);
-    } else {
-        console.error('❌ ERRO: searchComponent não foi carregado!');
-        console.error('Verif se simple-component-search.js está sendo carregado antes de machine-components-integration.js');
-    }
-}
-
-/**
- * Inicializa listeners para os botões de adicionar componentes
- * USANDO EVENT DELEGATION para funcionar com conteúdo dinâmico (modais AJAX)
- */
-function initializeComponentButtons() {
-    console.log('🔧 Inicializando sistema de componentes com EVENT DELEGATION');
-
-    // Remove listener antigo se existir para evitar duplicatas
-    if (window.componentButtonClickHandler) {
-        document.removeEventListener('click', window.componentButtonClickHandler);
+    /**
+     * Aguarda o carregamento de simple-component-search.js
+     */
+    function waitForSearchComponent(callback, attempts = 0) {
+        if (typeof searchComponent !== 'undefined') {
+            console.log('✅ searchComponent disponível, inicializando...');
+            callback();
+        } else if (attempts < 30) {
+            // Aguarda até 3 segundos
+            setTimeout(() => {
+                waitForSearchComponent(callback, attempts + 1);
+            }, 100);
+        } else {
+            console.error('❌ ERRO: searchComponent não foi carregado!');
+            console.error('Verif se simple-component-search.js está sendo carregado antes de machine-components-integration.js');
+        }
     }
 
-    // Define o handler como função global para poder remover depois
-    window.componentButtonClickHandler = function(e) {
-        // Verifica se o clique foi em um botão de componente ou dentro dele
+    /**
+     * Inicializa listeners para os botões de adicionar componentes
+     * USANDO EVENT DELEGATION para funcionar com conteúdo dinâmico (modais AJAX)
+     */
+    function initializeComponentButtons() {
+        console.log('🔧 Inicializando sistema de componentes com EVENT DELEGATION');
+
+        // Remove listener antigo se existir para evitar duplicatas
+        if (window.componentButtonClickHandler) {
+            document.removeEventListener('click', window.componentButtonClickHandler);
+        }
+
+        // Define o handler como função global para poder remover depois
+        window.componentButtonClickHandler = function(e) {
+            // Verifica se o clique foi em um botão de componente ou dentro dele
         const button = e.target.closest('.btn-add-component-modal');
         if (!button) return;
 
@@ -102,21 +103,57 @@ initializeIfReady();
 /**
  * Processa a seleção de um produto para um componente
  * Sobrescreve a função do simple-component-search.js
+ * ATUALIZADO: Agora inclui validação de estoque
  */
-window.selectProduct = function(event, productName, targetFieldId, productId) {
+window.selectProduct = function(event, productName, targetFieldId, productId, stockQty) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
     }
 
     console.log('═══════════════════════════════════════════════════════════');
-    console.log('🎯 selectProduct - Componente de Máquina');
+    console.log('🎯 selectProduct - Componente de Máquina (COM VALIDAÇÃO ESTOQUE)');
     console.log('  componentKey:', targetFieldId);
     console.log('  productName:', productName);
     console.log('  productId:', productId);
+    console.log('  stockQty:', stockQty);
     console.log('═══════════════════════════════════════════════════════════');
 
     try {
+        // 🔍 VALIDAÇÃO DE ESTOQUE: Conta quantas vezes este produto já foi adicionado
+        const normalizedProductId = parseInt(productId, 10);
+        let currentQuantity = 0;
+
+        // Busca em TODOS os containers de chips por este produto
+        const allChipsContainers = document.querySelectorAll('.component-chips-container');
+        allChipsContainers.forEach(container => {
+            const chips = container.querySelectorAll(`[data-product-id="${normalizedProductId}"]`);
+            chips.forEach(chip => {
+                const chipText = chip.querySelector('span').textContent;
+                const quantityMatch = chipText.match(/\((\d+)x\)/);
+                const qty = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+                currentQuantity += qty;
+                console.log(`  📊 Encontrado chip: "${chipText}" -> qty=${qty}`);
+            });
+        });
+
+        console.log(`  📊 Quantidade atual deste produto: ${currentQuantity}`);
+        console.log(`  📦 Estoque disponível: ${stockQty}`);
+        console.log(`  ✓ Quantidade após adicionar: ${currentQuantity + 1}`);
+
+        // Valida se há estoque suficiente
+        if (currentQuantity >= stockQty) {
+            console.error('❌ ESTOQUE INSUFICIENTE!');
+            alert(`❌ Estoque insuficiente!\n\n` +
+                  `Produto: ${productName}\n` +
+                  `Estoque disponível: ${stockQty} un.\n` +
+                  `Já adicionado: ${currentQuantity} un.\n\n` +
+                  `Você não pode adicionar mais unidades deste produto.`);
+            return;  // Bloqueia a adição
+        }
+
+        console.log('✅ Estoque OK, prosseguindo...');
+
         // Adiciona o chip usando a função de machine-components-integration
         machineComponentsAddProductChip(targetFieldId, productName, productId);
 
@@ -126,8 +163,9 @@ window.selectProduct = function(event, productName, targetFieldId, productId) {
         // Atualiza o JSON de componentes
         buildAndUpdateComponentsJSON();
 
-        // Feedback
-        showToast(`✅ ${productName} adicionado ao componente`);
+        // Feedback com informação de estoque
+        const remainingStock = stockQty - (currentQuantity + 1);
+        showToast(`✅ ${productName} adicionado (Restam ${remainingStock} un. em estoque)`);
 
         console.log('✅ selectProduct completado');
 
@@ -141,6 +179,12 @@ window.selectProduct = function(event, productName, targetFieldId, productId) {
  * Constrói o JSON de componentes e o salva em um campo hidden
  */
 function buildAndUpdateComponentsJSON() {
+    // Se está cancelando a modal, não executa
+    if (typeof window.isMachineModalCanceling !== 'undefined' && window.isMachineModalCanceling === true) {
+        console.log('⚠️ buildAndUpdateComponentsJSON: Modal está sendo cancelada, ignorando...');
+        return;
+    }
+    
     console.log('🔨 buildAndUpdateComponentsJSON - Iniciando');
 
     const componentsData = {};
@@ -160,13 +204,37 @@ function buildAndUpdateComponentsJSON() {
                 // Se tipo permite múltiplos (RAM, HDD), cria array
                 if (type === 'RAM' || type === 'HDD') {
                     componentsData[type] = [];
-                    chips.forEach(chip => {
+                    console.log(`  🔍 Processando chips de ${type}...`);
+
+                    chips.forEach((chip, chipIndex) => {
                         const productId = chip.getAttribute('data-product-id');
                         const productName = chip.getAttribute('data-product-name');
-                        componentsData[type].push({
-                            productId: parseInt(productId),
-                            productName: productName
-                        });
+
+                        // 🔑 CRUCIAL: Extrai quantidade do texto do chip
+                        // Formato: "HD 500GB" ou "HD 500GB (2x)" ou "HD 500GB (3x)"
+                        const chipText = chip.querySelector('span').textContent;
+                        console.log(`    ═══════════════════════════════════════`);
+                        console.log(`    Chip ${chipIndex + 1}/${chips.length}:`);
+                        console.log(`      Texto completo: "${chipText}"`);
+                        console.log(`      productId: ${productId}`);
+                        console.log(`      productName: ${productName}`);
+
+                        const quantityMatch = chipText.match(/\((\d+)x\)/);
+                        const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+
+                        console.log(`      Regex match: ${quantityMatch ? quantityMatch[0] : 'NENHUM'}`);
+                        console.log(`      Quantidade extraída: ${quantity}`);
+                        console.log(`      Vai adicionar ${quantity}x no array`);
+
+                        // Adiciona "quantity" vezes o mesmo produto
+                        for (let i = 0; i < quantity; i++) {
+                            componentsData[type].push({
+                                productId: parseInt(productId),
+                                productName: productName
+                            });
+                            console.log(`        [${i + 1}/${quantity}] Item adicionado ao array`);
+                        }
+                        console.log(`    ═══════════════════════════════════════`);
                     });
                 } else {
                     // Tipo única seleção, pega primeiro chip
@@ -184,12 +252,27 @@ function buildAndUpdateComponentsJSON() {
 
     const json = JSON.stringify(componentsData);
     console.log('  JSON gerado:', json);
+    console.log('  JSON parsed:', componentsData);
+    console.table(componentsData);
+    
+    // 🔍 NOVO: Contagem de elementos no JSON por tipo
+    let totalElements = 0;
+    Object.entries(componentsData).forEach(([type, data]) => {
+        if (Array.isArray(data)) {
+            console.log(`  📊 ${type}: ${data.length} elemento(s)`);
+            totalElements += data.length;
+        } else if (data && typeof data === 'object' && data.productId) {
+            console.log(`  📊 ${type}: 1 elemento`);
+            totalElements += 1;
+        }
+    });
+    console.log(`  📊 TOTAL DE ELEMENTOS NO JSON: ${totalElements}`);
 
     // Salva em campo hidden para o formulário
     const hiddenField = document.getElementById('machine-components-json');
     if (hiddenField) {
         hiddenField.value = json;
-        console.log('✅ Campo hidden atualizado');
+        console.log('✅ Campo hidden atualizado com:', json);
     } else {
         console.warn('⚠️ Campo hidden machine-components-json não encontrado');
     }
@@ -247,3 +330,5 @@ function showToast(message) {
 }
 
 console.log('✅ machine-components-integration.js inicializado com sucesso');
+
+} // Fecha o bloco 'else' de prevençao de carregamento duplicado

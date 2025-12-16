@@ -55,7 +55,7 @@ header('Content-Type: text/html; charset=utf-8');
             </div>
             <div class="card-body">
                 <?php
-                $footer_content = file_get_contents(__DIR__ . '/includes/footer.php');
+                $footer_content = file_get_contents(__DIR__ . '/../../includes/footer.php');
                 $has_modal = strpos($footer_content, 'id="scannerModal"') !== false;
                 $has_iframe = strpos($footer_content, 'id="scannerIframe"') !== false;
                 $has_js = strpos($footer_content, 'setScannedCode') !== false;

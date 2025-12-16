@@ -224,7 +224,15 @@ window.showConfirmation = function(options) {
     };
 
     // Remove qualquer modal de confirmação existente
-    document.getElementById('confirmationModal')?.remove();
+    const existingModal = document.getElementById('confirmationModal');
+    if (existingModal) {
+        // Tenta destruir a instância do Bootstrap Modal se existir
+        const bsInstance = bootstrap.Modal.getInstance(existingModal);
+        if (bsInstance) {
+            bsInstance.hide();
+        }
+        existingModal.remove();
+    }
 
     const modalHtml = `
         <div class="modal fade" id="confirmationModal" tabindex="-1">
@@ -252,14 +260,21 @@ window.showConfirmation = function(options) {
     const confirmBtn = document.getElementById('confirmBtn');
     const confirmationModal = new bootstrap.Modal(modalElement);
 
-    confirmBtn.addEventListener('click', () => {
+    // Cria um handler novo que será removido automaticamente
+    const confirmHandler = () => {
         config.onConfirm();
         confirmationModal.hide();
-    });
+    };
 
+    // Adiciona o listener com { once: true } para executar apenas uma vez
+    confirmBtn.addEventListener('click', confirmHandler, { once: true });
+
+    // Remove o modal quando ele se fecha
     modalElement.addEventListener('hidden.bs.modal', () => {
+        // Remove o listener para limpar
+        confirmBtn.removeEventListener('click', confirmHandler);
         modalElement.remove();
-    });
+    }, { once: true });
 
     confirmationModal.show();
 };

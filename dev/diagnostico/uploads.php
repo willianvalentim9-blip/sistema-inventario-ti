@@ -65,7 +65,7 @@ echo '<tbody>';
 
 $all_ok = true;
 foreach ($upload_folders as $folder => $description) {
-    $full_path = realpath(__DIR__ . '/../' . $folder);
+    $full_path = realpath(__DIR__ . '/../../' . $folder);
 
     echo '<tr>';
     echo '<td><strong>' . htmlspecialchars($description) . '</strong><br><small class="text-muted">' . $folder . '</small></td>';

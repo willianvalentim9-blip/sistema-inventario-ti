@@ -104,6 +104,17 @@
    CORREÇÃO DE BADGES E CARDS NO TEMA ESCURO
    ======================================== */
 
+/* Badges com fundo escuro - texto claro em ambos os temas */
+.badge.bg-dark.text-light {
+    background-color: #1f2937 !important;
+    color: #ffffff !important;
+}
+
+.theme-dark_blue .badge.bg-dark.text-light {
+    background-color: #111827 !important;
+    color: #ffffff !important;
+}
+
 /* Badges com fundo claro - ficam ilegíveis em tema escuro */
 .theme-dark_blue .badge.bg-light {
     background-color: var(--bs-tertiary-bg) !important;
@@ -128,6 +139,27 @@
     background-color: var(--bs-secondary-bg) !important;
     color: var(--bs-body-color) !important;
     border-top-color: var(--bs-border-color) !important;
+}
+
+/* Bordas internas dos cards - divisores e separadores */
+.theme-dark_blue .card hr {
+    border-color: var(--bs-border-color) !important;
+}
+
+.theme-dark_blue .card-body hr,
+.theme-dark_blue .card-body .border,
+.theme-dark_blue .card-body [class*="border-"] {
+    border-color: var(--bs-border-color) !important;
+}
+
+/* Corrigir bordas brancas/claras em cards */
+.theme-dark_blue .card-body .border-top,
+.theme-dark_blue .card-body .border-bottom,
+.theme-dark_blue .card-body .border-start,
+.theme-dark_blue .card-body .border-end,
+.theme-dark_blue .card [class*="border-light"],
+.theme-dark_blue .card [class*="border-white"] {
+    border-color: var(--bs-border-color) !important;
 }
 
 /* Texto muted (desbotado) - melhorar legibilidade */

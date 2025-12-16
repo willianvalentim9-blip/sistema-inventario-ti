@@ -359,6 +359,25 @@ body.dark-mode .bs-tooltip-end .tooltip-arrow::before {
     white-space: nowrap;
 }
 
+/* ========================================
+   ESTILO DOS SUB-ITENS DO COLLAPSE
+   ======================================== */
+/* Remove os bullets dos sub-itens do collapse */
+#movementationSubmenu {
+    list-style: none !important;
+    padding-left: 0 !important;
+}
+
+#movementationSubmenu li {
+    list-style: none !important;
+    list-style-type: none !important;
+}
+
+#movementationSubmenu li::before {
+    content: none !important;
+    display: none !important;
+}
+
 /* Botões com ícone */
 .btn-primary-custom i,
 .btn-secondary-custom i,

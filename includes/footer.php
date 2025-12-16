@@ -101,10 +101,11 @@ body.modal-open {
 }
 </style>
 
-<script src="js/bootstrap.bundle.min.js"></script>
-<script src="js/custom.js"></script>
-<script src="js/enhanced_ui.js"></script>
-<script src="js/history-modal.js"></script>
+<script src="/sistema5/js/bootstrap.bundle.min.js"></script>
+<script src="/sistema5/js/custom.js"></script>
+<script src="/sistema5/js/enhanced_ui.js"></script>
+<script src="/sistema5/js/history-modal.js"></script>
+<script src="/sistema5/js/media-upload.js"></script>
 
 <?php if (isset($additional_js)): ?>
     <?php foreach ($additional_js as $js_file): ?>
@@ -164,7 +165,7 @@ body.modal-open {
 
                 // Carrega o iframe com o target input
                 if (scannerIframe) {
-                    scannerIframe.src = `scanner_modal.php?target=${targetInputId}`;
+                    scannerIframe.src = `modules/barcode/scanner_modal.php?target=${targetInputId}`;
                 }
 
                 // Cria/pega a instância do modal e abre programaticamente

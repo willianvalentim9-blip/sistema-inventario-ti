@@ -3,7 +3,7 @@
 // DIAGNÓSTICO: SOFT DELETE
 // ========================================
 
-$config_path = __DIR__ . '/../config.php';
+$config_path = __DIR__ . '/../../config.php';
 if (!file_exists($config_path)) {
     echo '<div class="alert alert-danger">';
     echo '<i class="fas fa-exclamation-triangle me-2"></i>';
@@ -85,12 +85,46 @@ try {
     } else {
         echo '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>NÃO Existe</span>';
     }
+    echo '</tr>';
+    echo '</table>';
+    echo '</div></div>';
+
+    // Verificar warehouse
+    echo '<div class="card mb-3">';
+    echo '<div class="card-header bg-warning text-dark"><strong>Tabela: warehouse</strong></div>';
+    echo '<div class="card-body">';
+
+    $stmt = $pdo->query("DESCRIBE warehouse");
+    $columns_w = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+    $has_is_deleted_w = in_array('is_deleted', $columns_w);
+    $has_deleted_at_w = in_array('deleted_at', $columns_w);
+
+    echo '<table class="table table-sm mb-0">';
+    echo '<tr>';
+    echo '<td width="30%"><strong>Coluna is_deleted</strong></td>';
+    echo '<td>';
+    if ($has_is_deleted_w) {
+        echo '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Existe</span>';
+    } else {
+        echo '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>NÃO Existe</span>';
+    }
+    echo '</td></tr>';
+
+    echo '<tr>';
+    echo '<td><strong>Coluna deleted_at</strong></td>';
+    echo '<td>';
+    if ($has_deleted_at_w) {
+        echo '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Existe</span>';
+    } else {
+        echo '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>NÃO Existe</span>';
+    }
     echo '</td></tr>';
     echo '</table>';
     echo '</div></div>';
 
     // Contadores
-    if ($has_is_deleted && $has_is_deleted_m) {
+    if ($has_is_deleted && $has_is_deleted_m && $has_is_deleted_w) {
         echo '<h4 class="mt-4 mb-3"><i class="fas fa-chart-pie me-2"></i>Estatísticas de Soft Delete</h4>';
         echo '<div class="row">';
 
@@ -125,7 +159,7 @@ try {
         $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines WHERE is_deleted = TRUE");
         $deleted_machines = $stmt->fetch()['total'];
 
-        echo '<div class="col-md-6">';
+        echo '<div class="col-md-4">';
         echo '<div class="card">';
         echo '<div class="card-header bg-info text-white"><strong>Máquinas</strong></div>';
         echo '<div class="card-body">';
@@ -136,10 +170,31 @@ try {
         echo '</table>';
         echo '</div></div></div>';
 
+        // Armazém
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM warehouse");
+        $total_warehouse = $stmt->fetch()['total'];
+
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM warehouse WHERE is_deleted = FALSE OR is_deleted IS NULL");
+        $active_warehouse = $stmt->fetch()['total'];
+
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM warehouse WHERE is_deleted = TRUE");
+        $deleted_warehouse = $stmt->fetch()['total'];
+
+        echo '<div class="col-md-4">';
+        echo '<div class="card">';
+        echo '<div class="card-header bg-warning text-dark"><strong>Armazém</strong></div>';
+        echo '<div class="card-body">';
+        echo '<table class="table table-sm mb-0">';
+        echo '<tr><td><strong>Total</strong></td><td><span class="badge bg-secondary">' . $total_warehouse . '</span></td></tr>';
+        echo '<tr><td><strong>Ativos</strong></td><td><span class="badge bg-success">' . $active_warehouse . '</span></td></tr>';
+        echo '<tr><td><strong>Deletados</strong></td><td><span class="badge bg-danger">' . $deleted_warehouse . '</span></td></tr>';
+        echo '</table>';
+        echo '</div></div></div>';
+
         echo '</div>';
 
         // Últimos itens deletados
-        if ($deleted_products > 0 || $deleted_machines > 0) {
+        if ($deleted_products > 0 || $deleted_machines > 0 || $deleted_warehouse > 0) {
             echo '<h5 class="mt-4 mb-3"><i class="fas fa-history me-2"></i>Últimos Itens Deletados</h5>';
 
             if ($deleted_products > 0) {
@@ -175,11 +230,28 @@ try {
                 }
                 echo '</tbody></table>';
             }
+
+            if ($deleted_warehouse > 0) {
+                echo '<h6 class="text-muted mt-3">Armazém:</h6>';
+                $stmt = $pdo->query("SELECT id, name, deleted_at FROM warehouse WHERE is_deleted = TRUE ORDER BY deleted_at DESC LIMIT 5");
+                $recent_warehouse = $stmt->fetchAll();
+
+                echo '<table class="table table-sm table-bordered">';
+                echo '<thead><tr><th>ID</th><th>Nome</th><th>Deletado em</th></tr></thead><tbody>';
+                foreach ($recent_warehouse as $w) {
+                    echo '<tr>';
+                    echo '<td>#' . $w['id'] . '</td>';
+                    echo '<td>' . htmlspecialchars($w['name']) . '</td>';
+                    echo '<td>' . date('d/m/Y H:i', strtotime($w['deleted_at'])) . '</td>';
+                    echo '</tr>';
+                }
+                echo '</tbody></table>';
+            }
         }
     }
 
     // Resultado final
-    if ($has_is_deleted && $has_deleted_at && $has_is_deleted_m && $has_deleted_at_m) {
+    if ($has_is_deleted && $has_deleted_at && $has_is_deleted_m && $has_deleted_at_m && $has_is_deleted_w && $has_deleted_at_w) {
         echo '<div class="alert alert-success mt-4">';
         echo '<i class="fas fa-check-circle me-2"></i>';
         echo '<strong>Soft Delete Configurado!</strong> Todas as colunas necessárias estão presentes.';

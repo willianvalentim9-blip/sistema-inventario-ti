@@ -1,0 +1,191 @@
+/* ========================================
+   ANIMAÇÕES DE ÍCONES NO SIDEBAR
+   Ícones animados apenas quando ativo
+   ======================================== */
+
+/* ========================================
+   ANIMAÇÃO FLOAT (FLUTUAÇÃO)
+   ======================================== */
+
+.nav-link.active i.animate-float {
+    animation: sidebarFloat 2.5s ease-in-out infinite;
+}
+
+@keyframes sidebarFloat {
+    0%, 100% { 
+        transform: translateY(0px);
+    }
+    50% { 
+        transform: translateY(-6px);
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO PULSE (PULSAÇÃO)
+   ======================================== */
+
+.nav-link.active i.animate-pulse {
+    animation: sidebarPulse 2s ease-in-out infinite;
+}
+
+@keyframes sidebarPulse {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO SPIN (ROTAÇÃO)
+   ======================================== */
+
+.nav-link.active i.animate-spin {
+    animation: sidebarSpin 3s linear infinite;
+}
+
+@keyframes sidebarSpin {
+    0% { 
+        transform: rotate(0deg);
+    }
+    100% { 
+        transform: rotate(360deg);
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO BOUNCE (PULO)
+   ======================================== */
+
+.nav-link.active i.animate-bounce {
+    animation: sidebarBounce 1s ease-in-out infinite;
+}
+
+@keyframes sidebarBounce {
+    0%, 100% { 
+        transform: translateY(0);
+    }
+    50% { 
+        transform: translateY(-8px);
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO SHAKE (TREMOR)
+   ======================================== */
+
+.nav-link.active i.animate-shake {
+    animation: sidebarShake 0.5s ease-in-out infinite;
+}
+
+@keyframes sidebarShake {
+    0%, 100% { 
+        transform: translateX(0);
+    }
+    25% { 
+        transform: translateX(-2px);
+    }
+    75% { 
+        transform: translateX(2px);
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO SWING (BALANÇO)
+   ======================================== */
+
+.nav-link.active i.animate-swing {
+    animation: sidebarSwing 1s ease-in-out infinite;
+    transform-origin: top center;
+}
+
+@keyframes sidebarSwing {
+    0%, 100% { 
+        transform: rotate(0deg);
+    }
+    50% { 
+        transform: rotate(10deg);
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO BLINK (PISCAR)
+   ======================================== */
+
+.nav-link.active i.animate-blink {
+    animation: sidebarBlink 1.5s ease-in-out infinite;
+}
+
+@keyframes sidebarBlink {
+    0%, 49%, 100% { 
+        opacity: 1;
+    }
+    50%, 99% { 
+        opacity: 0.3;
+    }
+}
+
+/* ========================================
+   ANIMAÇÃO GRADIENT (GRADIENTE)
+   Efeito de gradiente animado
+   ======================================== */
+
+.nav-link.active i.animate-gradient {
+    background: linear-gradient(45deg, #007bff, #0056b3, #007bff);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: sidebarGradient 3s ease infinite;
+}
+
+@keyframes sidebarGradient {
+    0% { 
+        background-position: 0% 50%;
+    }
+    50% { 
+        background-position: 100% 50%;
+    }
+    100% { 
+        background-position: 0% 50%;
+    }
+}
+
+/* ========================================
+   COMBINAÇÕES DE ANIMAÇÕES
+   ======================================== */
+
+/* Float + Color Change */
+.nav-link.active i.animate-float-glow {
+    animation: sidebarFloat 2.5s ease-in-out infinite,
+               sidebarGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes sidebarGlow {
+    0%, 100% { 
+        text-shadow: 0 0 0px rgba(0, 123, 255, 0);
+    }
+    50% { 
+        text-shadow: 0 0 8px rgba(0, 123, 255, 0.6);
+    }
+}
+
+/* Pulse + Glow */
+.nav-link.active i.animate-pulse-glow {
+    animation: sidebarPulse 2s ease-in-out infinite,
+               sidebarGlow 2s ease-in-out infinite;
+}
+
+/* ========================================
+   PERFORMANCE - GPU ACCELERATION
+   ======================================== */
+
+.nav-link i[class*="animate-"] {
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}

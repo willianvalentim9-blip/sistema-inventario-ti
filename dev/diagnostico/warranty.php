@@ -3,7 +3,7 @@
 // DIAGNÓSTICO: SISTEMA DE GARANTIAS
 // ========================================
 
-$config_path = __DIR__ . '/../config.php';
+$config_path = __DIR__ . '/../../config.php';
 if (!file_exists($config_path)) {
     echo '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Config.php não encontrado</div>';
     return;
@@ -15,9 +15,10 @@ try {
     $pdo = getConnection();
 
     $warranty_tables = [
-        'product_warranties' => 'Garantias de Produtos',
-        'machine_warranties' => 'Garantias de Máquinas',
-        'warranty_history' => 'Histórico de Garantias'
+        'products' => 'Produtos com Garantia',
+        'ready_machines' => 'Máquinas com Garantia',
+        'warranty_history' => 'Histórico de Garantias (Geral)',
+        'warehouse_warranty_history' => 'Histórico de Garantias (Armazém)'
     ];
 
     echo '<h4 class="mb-3"><i class="fas fa-shield-alt me-2"></i>Tabelas de Garantia</h4>';
@@ -52,29 +53,55 @@ try {
         echo '</div>';
 
         // Estatísticas
-        echo '<h5 class="mt-4 mb-3"><i class="fas fa-chart-bar me-2"></i>Estatísticas</h5>';
+        echo '<h5 class="mt-4 mb-3"><i class="fas fa-chart-bar me-2"></i>Estatísticas de Garantias</h5>';
         echo '<div class="row">';
 
-        $stmt = $pdo->query("SELECT COUNT(*) as total FROM product_warranties");
+        // Produtos com garantia (contando itens where has_warranty = 1)
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM products WHERE has_warranty = 1");
         $total_prod = $stmt->fetch()['total'];
 
-        $stmt = $pdo->query("SELECT COUNT(*) as total FROM machine_warranties");
+        // Máquinas com garantia (contando itens where has_warranty = 1)
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM ready_machines WHERE has_warranty = 1");
         $total_mach = $stmt->fetch()['total'];
 
-        echo '<div class="col-md-6">';
+        // Armazém com garantia
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM warehouse WHERE has_warranty = 1");
+        $total_warehouse = $stmt->fetch()['total'];
+
+        // Histórico de garantias de armazém
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM warehouse_warranty_history");
+        $total_warehouse_history = $stmt->fetch()['total'];
+
+        echo '<div class="col-md-3">';
         echo '<div class="card border-primary">';
         echo '<div class="card-body text-center">';
         echo '<i class="fas fa-box fa-2x text-primary mb-2"></i>';
         echo '<h3>' . number_format($total_prod) . '</h3>';
-        echo '<small class="text-muted">Garantias de Produtos</small>';
+        echo '<small class="text-muted">Produtos com Garantia</small>';
         echo '</div></div></div>';
 
-        echo '<div class="col-md-6">';
+        echo '<div class="col-md-3">';
         echo '<div class="card border-info">';
         echo '<div class="card-body text-center">';
         echo '<i class="fas fa-desktop fa-2x text-info mb-2"></i>';
         echo '<h3>' . number_format($total_mach) . '</h3>';
-        echo '<small class="text-muted">Garantias de Máquinas</small>';
+        echo '<small class="text-muted">Máquinas com Garantia</small>';
+        echo '</div></div></div>';
+
+        echo '<div class="col-md-3">';
+        echo '<div class="card border-warning">';
+        echo '<div class="card-body text-center">';
+        echo '<i class="fas fa-warehouse fa-2x text-warning mb-2"></i>';
+        echo '<h3>' . number_format($total_warehouse) . '</h3>';
+        echo '<small class="text-muted">Itens Armazém c/ Garantia</small>';
+        echo '</div></div></div>';
+
+        echo '<div class="col-md-3">';
+        echo '<div class="card border-success">';
+        echo '<div class="card-body text-center">';
+        echo '<i class="fas fa-history fa-2x text-success mb-2"></i>';
+        echo '<h3>' . number_format($total_warehouse_history) . '</h3>';
+        echo '<small class="text-muted">Histórico Armazém</small>';
         echo '</div></div></div>';
 
         echo '</div>';
