@@ -4,7 +4,7 @@
 // ========================================
 
 $page_title = "Alertas de Estoque";
-require_once 'config.php';
+require_once '../../config.php';
 require_once 'includes/header.php';
 
 requireLogin();

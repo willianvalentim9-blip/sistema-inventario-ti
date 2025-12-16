@@ -5,7 +5,7 @@
 // Esta página permite exportar diferentes tipos de dados em formato CSV
 
 // Inclui o arquivo de configuração
-require_once 'config.php';
+require_once '../../config.php';
 
 // Verifica se o usuário está logado
 requireLogin();

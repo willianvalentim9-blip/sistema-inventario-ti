@@ -7,7 +7,7 @@
 // Define o cabeçalho como JSON desde o início
 header('Content-Type: application/json');
 
-require_once 'config.php';
+require_once '../../config.php';
 
 $response = ['success' => false, 'message' => 'Ocorreu um erro desconhecido.', 'filename' => ''];
 

@@ -2,7 +2,7 @@
 // ========================================
 // API PARA ATUALIZAÇÃO DA LOGO (UPLOAD E REMOÇÃO)
 // ========================================
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin(); // Apenas admins podem alterar a logo
 
 header('Content-Type: application/json');

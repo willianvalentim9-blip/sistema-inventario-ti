@@ -3,7 +3,7 @@
 // PÁGINA DE GERENCIAMENTO DE ITENS DELETADOS (SOFT DELETE RECOVERY)
 // ========================================
 
-require_once 'config.php';
+require_once '../../config.php';
 requireAdmin(); // IMPORTANTE: Deve vir ANTES do header para evitar output antes do redirect
 
 $page_title = "Itens Deletados";

@@ -1,5 +1,5 @@
 <?php
-require_once 'config.php';
+require_once '../../config.php';
 
 // Verifica se o usuário está logado
 if (!isLoggedIn()) {

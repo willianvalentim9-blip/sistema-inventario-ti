@@ -1,6 +1,6 @@
 <?php
 // Página para visualizar logs de debug
-require_once 'config.php';
+require_once '../../config.php';
 requireLogin();
 
 $page_title = 'Debug Logs - Componentes';
