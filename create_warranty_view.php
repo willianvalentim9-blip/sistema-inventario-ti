@@ -1,6 +1,0 @@
-<?php
-// Redirect automático para o novo local do arquivo
-$query = $_SERVER['QUERY_STRING'] ?? '';
-$location = 'modules/warranties/create_warranty_view.php' . ($query ? '?' . $query : '');
-header('Location: ' . $location);
-exit();
