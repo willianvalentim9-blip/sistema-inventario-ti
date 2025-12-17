@@ -74,7 +74,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
 
             <ul class="nav nav-pills flex-column mb-auto px-2">
                 <li class="nav-item">
-                    <a href="<?php echo url('dashboard.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
+                    <a href="<?php echo url('public/dashboard.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
                         <i class="fas fa-tachometer-alt fa-fw"></i>
                         <span class="sidebar-text">Dashboard</span>
                     </a>
@@ -119,7 +119,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                     </a>
                 </li>
                 <li>
-                    <a href="<?php echo url('deleted_items.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Itens Deletados">
+                    <a href="<?php echo url('modules/utilities/deleted_items.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Itens Deletados">
                         <i class="fas fa-trash fa-fw"></i>
                         <span class="sidebar-text">Itens Deletados</span>
                     </a>
@@ -151,7 +151,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         </div>
                     </li>
                     <li>
-                        <a href="<?php echo url('settings.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Configurações">
+                        <a href="<?php echo url('modules/utilities/settings.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Configurações">
                             <i class="fas fa-cogs fa-fw"></i>
                             <span class="sidebar-text">Configurações</span>
                         </a>
@@ -195,7 +195,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="<?php echo url('modules/users/profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
                             <?php if (isAdmin()): ?>
-                                <li><a class="dropdown-item" href="<?php echo url('settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
+                                <li><a class="dropdown-item" href="<?php echo url('modules/utilities/settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
                             <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="<?php echo url('logout.php'); ?>"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>

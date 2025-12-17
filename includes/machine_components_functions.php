@@ -209,11 +209,6 @@ function saveMachineComponents($pdo, $machine_id, $components_json) {
         error_log("Componentes inseridos: {$componentsInserted}");
         error_log("═══════════════════════════════════════════════════════════");
 
-        if ($shouldCommit) {
-            $pdo->commit();
-            error_log("✅ Transação comitada em saveMachineComponents");
-        }
-
         return true;
 
     } catch (Exception $e) {

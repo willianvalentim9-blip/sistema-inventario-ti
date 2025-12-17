@@ -107,12 +107,13 @@ try {
     $itemType = $_POST['type'] ?? 'product'; // 'product', 'machine' ou 'warehouse'
 
     // Define o diretório de destino com base no tipo
+    $base_upload_dir = dirname(__DIR__, 2) . '/uploads/'; // Sobe para raiz do projeto
     if ($itemType === 'machine') {
-        $upload_dir = __DIR__ . '/uploads/machines/';
+        $upload_dir = $base_upload_dir . 'machines/';
     } elseif ($itemType === 'warehouse') {
-        $upload_dir = __DIR__ . '/uploads/warehouse/';
+        $upload_dir = $base_upload_dir . 'warehouse/';
     } else {
-        $upload_dir = __DIR__ . '/uploads/products/';
+        $upload_dir = $base_upload_dir . 'products/';
     }
 
     // Validações de segurança do arquivo

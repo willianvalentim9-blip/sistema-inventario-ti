@@ -139,7 +139,7 @@ if (!$is_modal) {
             <div class="card-header card-header-custom"><i class="fas fa-image me-2"></i> Imagem do Produto</div>
             <div class="card-body text-center">
                 <?php if (!empty($product['image'])): ?>
-                    <img src="uploads/products/<?php echo htmlspecialchars($product['image']); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>" class="img-fluid rounded mb-3" style="max-height: 200px; object-fit: cover;">
+                    <img src="../../uploads/products/<?php echo htmlspecialchars($product['image']); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>" class="img-fluid rounded mb-3" style="max-height: 200px; object-fit: cover;">
                 <?php else: ?>
                     <div class="py-4">
                         <i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-5x text-muted mb-3"></i>

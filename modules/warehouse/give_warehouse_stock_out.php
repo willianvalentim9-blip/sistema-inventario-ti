@@ -8,6 +8,12 @@ header('Content-Type: application/json');
 require_once '../../config.php';
 requireLogin();
 
+// Verificar permissão - admin e administrativo podem fazer saída de estoque
+if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo')) {
+    echo json_encode(['success' => false, 'message' => 'Acesso negado. Apenas administradores e administrativos podem fazer saída de estoque.']);
+    exit;
+}
+
 $response = ['success' => false, 'message' => 'Ocorreu um erro desconhecido.'];
 $pdo = null;
 

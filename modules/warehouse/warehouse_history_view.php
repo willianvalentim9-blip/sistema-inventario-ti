@@ -18,13 +18,13 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Verificar permissão (apenas administrativo)
-if ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'admin') {
+// Verificar permissão (admin e administrativo)
+if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
     if (isset($_GET['modal']) && $_GET['modal'] === 'true') {
         http_response_code(403);
         exit('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Acesso negado</div>');
     }
-    header('Location: ../../dashboard.php');
+    header('Location: ../../public/dashboard.php');
     exit;
 }
 

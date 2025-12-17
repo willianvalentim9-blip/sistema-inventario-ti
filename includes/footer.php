@@ -103,6 +103,7 @@ body.modal-open {
 
 <script src="/sistema5/js/bootstrap.bundle.min.js"></script>
 <script src="/sistema5/js/custom.js"></script>
+<script src="/sistema5/js/mobile-improvements.js"></script>
 <script src="/sistema5/js/enhanced_ui.js"></script>
 <script src="/sistema5/js/history-modal.js"></script>
 <script src="/sistema5/js/media-upload.js"></script>
@@ -114,32 +115,109 @@ body.modal-open {
 <?php endif; ?>
 
 <script>
-    // Variável para controlar se a animação está a decorrer
-    let isSidebarTransitioning = false;
-
-    function toggleSidebar() {
-        if (isSidebarTransitioning) return;
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar) {
-            isSidebarTransitioning = true;
-            if (window.innerWidth <= 991.98) {
-                sidebar.classList.toggle('show');
-            } else {
-                sidebar.classList.toggle('collapsed');
-                localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    // ========================================
+    // FUNÇÃO PARA LIDAR COM AÇÕES DE ALERTA
+    // ========================================
+    function alertAction(button, alertType) {
+        if (alertType === 'success') {
+            // Se for sucesso, recarrega a página
+            location.reload();
+        } else {
+            // Se for erro/aviso, remove o alerta
+            const alert = button.closest('.alert');
+            if (alert) {
+                alert.style.transition = "opacity 0.5s ease-out";
+                alert.style.opacity = "0";
+                setTimeout(() => alert.remove(), 500);
             }
-            setTimeout(() => { isSidebarTransitioning = false; }, 300);
         }
     }
 
+    // ========================================
+    // CONTROLE DA SIDEBAR (CORRIGIDO)
+    // ========================================
+    let isSidebarAnimating = false;
+
+    function toggleSidebar() {
+        // Previne múltiplos cliques durante a animação
+        if (isSidebarAnimating) return;
+        
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        
+        if (!sidebar) return;
+        
+        isSidebarAnimating = true;
+        
+        const isMobile = window.innerWidth <= 991.98;
+        const animationDuration = 300;
+        
+        if (isMobile) {
+            // ===== MOBILE =====
+            // Toggle .show para exibir/esconder
+            sidebar.classList.toggle('show');
+            
+            // Mostrar/esconder overlay
+            if (overlay) {
+                overlay.classList.toggle('show');
+            }
+        } else {
+            // ===== DESKTOP =====
+            // Remover classe .show se existir (mobile artifact)
+            sidebar.classList.remove('show');
+            
+            // Toggle .collapsed para recolher/expandir
+            sidebar.classList.toggle('collapsed');
+            
+            // Salvar preferência do usuário
+            localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+        }
+        
+        // Liberar para próximo toggle após a animação
+        setTimeout(() => {
+            isSidebarAnimating = false;
+        }, animationDuration);
+    }
+
+    // Fechar sidebar ao clicar no overlay (mobile)
     document.addEventListener('DOMContentLoaded', function() {
-        // Lógica da sidebar
+        const overlay = document.querySelector('.sidebar-overlay');
+        if (overlay) {
+            overlay.addEventListener('click', function() {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar && window.innerWidth <= 991.98) {
+                    sidebar.classList.remove('show');
+                    overlay.classList.remove('show');
+                }
+            });
+        }
+        
+        // ===== CARREGAR ESTADO DA SIDEBAR AO INICIAR =====
         const sidebar = document.getElementById('sidebar');
         if (sidebar && window.innerWidth > 991.98) {
             if (localStorage.getItem('sidebarCollapsed') === 'true') {
                 sidebar.classList.add('collapsed');
             }
         }
+
+        // ===== ADAPTAR SIDEBAR AO REDIMENSIONAR A JANELA =====
+        window.addEventListener('resize', function() {
+            const sidebar = document.getElementById('sidebar');
+            if (!sidebar) return;
+            
+            if (window.innerWidth <= 991.98) {
+                // Entrou em mobile
+                sidebar.classList.remove('collapsed');
+                sidebar.classList.remove('show');
+            } else {
+                // Saiu de mobile
+                sidebar.classList.remove('show');
+                // Manter o estado de collapsed
+                if (localStorage.getItem('sidebarCollapsed') === 'true') {
+                    sidebar.classList.add('collapsed');
+                }
+            }
+        });
 
         // --- SCRIPT GLOBAL PARA O SCANNER MODAL (SUPORTE A MODAIS EMPILHADOS) ---
         const scannerModalEl = document.getElementById('scannerModal');
@@ -165,7 +243,7 @@ body.modal-open {
 
                 // Carrega o iframe com o target input
                 if (scannerIframe) {
-                    scannerIframe.src = `modules/barcode/scanner_modal.php?target=${targetInputId}`;
+                    scannerIframe.src = `/sistema5/modules/barcode/scanner_modal.php?target=${targetInputId}`;
                 }
 
                 // Cria/pega a instância do modal e abre programaticamente

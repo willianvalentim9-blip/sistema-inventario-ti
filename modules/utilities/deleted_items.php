@@ -2,9 +2,15 @@
 // ========================================
 // PÁGINA DE GERENCIAMENTO DE ITENS DELETADOS (SOFT DELETE RECOVERY)
 // ========================================
+// Admins: Vê tudo
+// Administrativos: Vê apenas Armazém e Garantias
 
 require_once '../../config.php';
-requireAdmin(); // IMPORTANTE: Deve vir ANTES do header para evitar output antes do redirect
+requireLogin();
+if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
+    header('Location: ../../public/dashboard.php');
+    exit;
+}
 
 $page_title = "Itens Deletados";
 
@@ -30,6 +36,24 @@ try {
     ");
     $stmt->execute();
     $deleted_machines = $stmt->fetchAll();
+
+    // Busca usuários deletados
+    $deleted_users = [];
+    if (isset($_SESSION['user_role']) && ($_SESSION['user_role'] === 'admin')) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id, username, email, role, deleted_at
+                FROM users
+                WHERE is_deleted = TRUE
+                ORDER BY deleted_at DESC
+            ");
+            $stmt->execute();
+            $deleted_users = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            error_log("Aviso: não foi possível buscar usuários deletados: " . $e->getMessage());
+            $deleted_users = [];
+        }
+    }
 
     // Busca itens do armazém deletados (apenas para administrativos)
     $deleted_warehouse = [];
@@ -144,10 +168,7 @@ try {
 }
 ?>
 
-<?php include 'includes/header.php'; ?>
-
-<!-- Container para alertas dinâmicos -->
-<div id="alert-container" class="position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
+<?php include '../../includes/header.php'; ?>
 
 <div class="container-fluid mt-4">
     <div class="row mb-4">
@@ -157,12 +178,26 @@ try {
                 Itens Deletados (Recuperáveis)
             </h1>
             <p class="text-muted mt-2">
-                Aqui você pode visualizar e restaurar produtos e máquinas que foram deletados.
+                Aqui você pode visualizar e restaurar itens que foram deletados.
             </p>
+            
+            <!-- Info sobre permissões -->
+            <?php if ($_SESSION['user_role'] === 'admin'): ?>
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="fas fa-shield-alt me-2"></i>
+                    <strong>Acesso Administrativo:</strong> Você pode visualizar TODOS os itens deletados (Produtos, Máquinas, Usuários, Armazém, Garantias).
+                </div>
+            <?php elseif ($_SESSION['user_role'] === 'administrativo'): ?>
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Acesso Limitado:</strong> Você pode visualizar apenas itens do Armazém e Garantias.
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
-    <!-- Produtos Deletados -->
+    <!-- Produtos Deletados (Apenas Admins) -->
+    <?php if ($_SESSION['user_role'] === 'admin'): ?>
     <div class="row mb-5">
         <div class="col-md-12">
             <div class="card border-0 shadow-sm">
@@ -225,8 +260,10 @@ try {
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
-    <!-- Máquinas Deletadas -->
+    <!-- Máquinas Deletadas (Apenas Admins) -->
+    <?php if ($_SESSION['user_role'] === 'admin'): ?>
     <div class="row mb-5">
         <div class="col-md-12">
             <div class="card border-0 shadow-sm">
@@ -287,6 +324,91 @@ try {
             </div>
         </div>
     </div>
+    <?php endif; ?>
+
+    <!-- Usuários Deletados (Apenas Admins) -->
+    <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin'): ?>
+    <div class="row mb-5">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user-slash text-danger me-2"></i>
+                        Usuários Deletados
+                        <span class="badge bg-danger ms-2"><?php echo count($deleted_users); ?></span>
+                        <span class="badge bg-warning text-dark ms-2">Apenas Admins</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <?php if (empty($deleted_users)): ?>
+                        <div class="alert alert-info" role="alert">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Nenhum usuário deletado encontrado.
+                        </div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Usuário</th>
+                                        <th>Email</th>
+                                        <th>Função</th>
+                                        <th>Deletado em</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($deleted_users as $user): ?>
+                                        <tr>
+                                            <td><span class="badge bg-secondary">#<?php echo $user['id']; ?></span></td>
+                                            <td>
+                                                <strong><?php echo htmlspecialchars($user['username']); ?></strong>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">
+                                                    <?php echo htmlspecialchars($user['email']); ?>
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <span class="badge <?php 
+                                                    $badge_class = 'bg-info';
+                                                    if ($user['role'] === 'admin') {
+                                                        $badge_class = 'bg-warning text-dark';
+                                                    } elseif ($user['role'] === 'administrativo') {
+                                                        $badge_class = 'bg-success text-white';
+                                                    }
+                                                    echo $badge_class;
+                                                ?>">
+                                                    <?php 
+                                                    $role_labels = ['admin' => 'Administrador', 'administrativo' => 'Administrativo', 'user' => 'Usuário'];
+                                                    echo $role_labels[$user['role']] ?? $user['role'];
+                                                    ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">
+                                                    <?php echo date('d/m/Y H:i', strtotime($user['deleted_at'])); ?>
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-success"
+                                                        onclick="restoreUser(<?php echo $user['id']; ?>, '<?php echo htmlspecialchars($user['username']); ?>')"
+                                                        title="Restaurar este usuário">
+                                                    <i class="fas fa-undo me-1"></i>Restaurar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <?php if (isset($_SESSION['user_role']) && ($_SESSION['user_role'] === 'administrativo' || $_SESSION['user_role'] === 'admin')): ?>
     <!-- Itens do Armazém Deletados (Apenas Administrativos) -->
@@ -578,7 +700,7 @@ try {
 <script>
 function restoreProduct(id, name) {
     if (confirm(`Deseja restaurar o produto "${name}"?\n\nEle voltará a aparecer nos relatórios de estoque.`)) {
-        fetch('api/restore_product.php', {
+        fetch('../../api/restore_product.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -603,7 +725,7 @@ function restoreProduct(id, name) {
 
 function restoreMachine(id, name) {
     if (confirm(`Deseja restaurar a máquina "${name}"?\n\nEla voltará a aparecer nos relatórios.`)) {
-        fetch('api/restore_machine.php', {
+        fetch('../../api/restore_machine.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -628,7 +750,7 @@ function restoreMachine(id, name) {
 
 function restoreWarehouse(id, name) {
     if (confirm(`Deseja restaurar o item do armazém "${name}"?\n\nEle voltará a aparecer nos relatórios do armazém.`)) {
-        fetch('api/restore_warehouse.php', {
+        fetch('../../api/restore_warehouse.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -653,7 +775,7 @@ function restoreWarehouse(id, name) {
 
 function restoreWarranty(id, name) {
     if (confirm(`Deseja restaurar a garantia de "${name}"?\n\nEla voltará a aparecer nos relatórios de garantias.`)) {
-        fetch('api/restore_warranty.php', {
+        fetch('../../api/restore_warranty.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -676,9 +798,34 @@ function restoreWarranty(id, name) {
     }
 }
 
+function restoreUser(id, name) {
+    if (confirm(`Deseja restaurar o usuário "${name}"?\n\nEle voltará a ter acesso ao sistema.`)) {
+        fetch('../../api/restore_user.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id: id })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Usuário restaurado com sucesso!', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert(data.message || 'Erro ao restaurar usuário', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            showAlert('Erro ao restaurar usuário', 'danger');
+        });
+    }
+}
+
 function restoreWarrantySupplier(id, name) {
     if (confirm(`Deseja restaurar o fornecedor "${name}"?\n\nEle voltará a aparecer na lista de fornecedores de garantia.`)) {
-        fetch('api/restore_warranty_supplier.php', {
+        fetch('../../api/restore_warranty_supplier.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -703,7 +850,7 @@ function restoreWarrantySupplier(id, name) {
 
 function restoreWarrantyTemplate(id, name) {
     if (confirm(`Deseja restaurar o template "${name}"?\n\nEle voltará a aparecer na lista de templates de garantia.`)) {
-        fetch('api/restore_warranty_template.php', {
+        fetch('../../api/restore_warranty_template.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -743,5 +890,5 @@ function showAlert(message, type) {
 </script>
 
 <?php
-require_once 'includes/footer.php';
+require_once '../../includes/footer.php';
 ?>

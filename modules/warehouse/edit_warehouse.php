@@ -5,11 +5,11 @@
 require_once '../../config.php';
 requireLogin();
 
-// Verificação de acesso - apenas administrativos e admin
-if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'admin')) {
-    $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem acessar o armazém.';
+// Verificação de acesso - admin e administrativo
+if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo')) {
+    $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem editar itens do armazém.';
     $_SESSION['flash_type'] = 'danger';
-    header('Location: ../../dashboard.php');
+    header('Location: ../../public/dashboard.php');
     exit;
 }
 
@@ -142,17 +142,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_data_stmt->execute([$warehouse_id]);
         $new_data = $new_data_stmt->fetch();
 
-        logAdminActivity($_SESSION["user_id"], "UPDATE", "warehouse", $warehouse_id, $old_data, $new_data);
+        // ⭐ NOVO: Apenas registra log se houver alterações reais
+        $data_changed = hasDataChanged($old_data, $new_data);
+        if ($data_changed) {
+            logAdminActivity($_SESSION["user_id"], "UPDATE", "warehouse", $warehouse_id, $old_data, $new_data);
+        }
 
         // Histórico de garantia para warehouse
-        if (function_exists('registerWarrantyHistory')) {
+        if ($data_changed && function_exists('registerWarrantyHistory')) {
             registerWarrantyHistory($pdo, $warehouse_id, 'UPDATE', $old_data, $new_data, $_SESSION["user_id"], 'warehouse');
         }
 
         $pdo->commit();
 
-        $_SESSION['flash_message'] = 'Item do armazém atualizado com sucesso!';
-        $_SESSION['flash_type'] = 'success';
+        // ⭐ NOVO: Apenas mostra mensagem se houve alterações
+        if ($data_changed) {
+            $_SESSION['flash_message'] = 'Item do armazém atualizado com sucesso!';
+            $_SESSION['flash_type'] = 'success';
+        }
 
         header('Location: warehouse.php');
         exit();
@@ -314,7 +321,7 @@ if (!$is_modal) {
                                         </div>
                                     </div>
                                     <div class="media-upload-preview" style="<?php echo empty($warehouse['image']) ? 'display: none;' : ''; ?>">
-                                        <img class="media-upload-preview-image" src="<?php echo !empty($warehouse['image']) ? 'uploads/warehouse/' . htmlspecialchars($warehouse['image']) : ''; ?>" alt="Preview">
+                                        <img class="media-upload-preview-image" src="<?php echo !empty($warehouse['image']) ? '../../uploads/warehouse/' . htmlspecialchars($warehouse['image']) : ''; ?>" alt="Preview">
                                         <div class="media-upload-preview-overlay">
                                             <button type="button" class="media-upload-action-btn" data-action="change" title="Trocar imagem">
                                                 <i class="fas fa-camera"></i>

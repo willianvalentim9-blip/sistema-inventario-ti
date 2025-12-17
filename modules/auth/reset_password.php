@@ -5,7 +5,7 @@
 require_once '../../config.php';
 
 if (isLoggedIn()) {
-    header("Location: dashboard.php");
+    header("Location: ../../public/dashboard.php");
     exit();
 }
 
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $is_token_valid) {
 
 $page_title = 'Redefinir Senha';
 $hide_sidebar = true;
-include 'includes/header.php';
+include '../../includes/header.php';
 ?>
 
 <div class="container-fluid vh-100 d-flex align-items-center justify-content-center bg-light">
@@ -106,4 +106,4 @@ include 'includes/header.php';
     </div>
 </div>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>

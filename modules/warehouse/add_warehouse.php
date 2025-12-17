@@ -3,11 +3,11 @@
 require_once '../../config.php';
 requireLogin();
 
-// Verificação de acesso - apenas administrativos e admin
-if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'admin')) {
-    $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem acessar o armazém.';
+// Verificação de acesso - admin e administrativo
+if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo')) {
+    $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem adicionar itens ao armazém.';
     $_SESSION['flash_type'] = 'danger';
-    header('Location: ../../dashboard.php');
+    header('Location: ../../public/dashboard.php');
     exit;
 }
 

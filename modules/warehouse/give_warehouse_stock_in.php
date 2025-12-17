@@ -4,6 +4,14 @@ require_once '../../config.php';
 require_once 'modules/logs/log_functions.php';
 requireLogin();
 
+// Verificar permissão - admin e administrativo podem fazer entrada de estoque
+if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo')) {
+    header('Content-Type: application/json');
+    ob_end_clean();
+    echo json_encode(['success' => false, 'message' => 'Acesso negado. Apenas administradores e administrativos podem fazer entrada de estoque.']);
+    exit;
+}
+
 header('Content-Type: application/json');
 
 $pdo = null;

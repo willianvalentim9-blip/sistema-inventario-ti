@@ -10,13 +10,13 @@ use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
 // Carrega os arquivos do PHPMailer manualmente
-require 'src/Exception.php';
-require 'src/PHPMailer.php';
-require 'src/SMTP.php';
+require '../../src/Exception.php';
+require '../../src/PHPMailer.php';
+require '../../src/SMTP.php';
 
 // Se o usuário já estiver logado, redireciona
 if (isLoggedIn()) {
-    header("Location: dashboard.php");
+    header("Location: ../../public/dashboard.php");
     exit();
 }
 
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $page_title = 'Esqueci minha Senha';
 $hide_sidebar = true;
-include 'includes/header.php';
+include '../../includes/header.php';
 ?>
 
 <div class="container-fluid vh-100 d-flex align-items-center justify-content-center bg-light">
@@ -146,4 +146,4 @@ include 'includes/header.php';
     </div>
 </div>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>

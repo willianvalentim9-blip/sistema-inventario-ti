@@ -6,11 +6,11 @@
 
 // Inclui o arquivo de configuração
 require_once '../../config.php';
-require_once 'modules/logs/log_functions.php';
+require_once '../logs/log_functions.php';
 
 // Se o usuário já estiver logado, redireciona para o dashboard
 if (isLoggedIn()) {
-    header("Location: dashboard.php");
+    header("Location: ../../public/dashboard.php");
     exit();
 }
 
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = getConnection();
             
             // Busca o usuário no banco de dados
-            $stmt = $pdo->prepare("SELECT id, username, password, email, role FROM users WHERE username = ? OR email = ?");
+            $stmt = $pdo->prepare("SELECT id, username, password, email, role, avatar FROM users WHERE username = ? OR email = ?");
             $stmt->execute([$username, $username]);
             $user = $stmt->fetch();
             
@@ -46,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['email'] = $user['email'];
                 $_SESSION['user_role'] = $user['role'];
+                $_SESSION['user_avatar'] = $user['avatar'] ?? '';
                 $_SESSION['login_time'] = time();
                 
                 // Atualiza o último acesso do usuário
@@ -63,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 
                 // Redireciona para o dashboard
-                header("Location: dashboard.php");
+                header("Location: ../../public/dashboard.php");
                 exit();
             } else {
                 $error_message = 'Usuário ou senha incorretos.';
@@ -80,7 +81,7 @@ $page_title = 'Login';
 $hide_sidebar = true; // Não exibe sidebar na página de login
 ?>
 
-<?php include 'includes/header.php'; ?>
+<?php include '../../includes/header.php'; ?>
 
 <div class="container-fluid vh-100">
     <div class="row h-100">
@@ -311,4 +312,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>

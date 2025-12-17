@@ -5,7 +5,7 @@
 // Esta página exibe a visão geral do sistema e estatísticas
 
 // Inclui o arquivo de configuração
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
 // Verifica se o usuário está logado
 requireLogin();
@@ -117,7 +117,7 @@ try {
 }
 ?>
 
-<?php include 'includes/header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2 text-primary-custom">
@@ -244,7 +244,7 @@ try {
                         </div>
                     <?php endforeach; ?>
                     <div class="text-center mt-3">
-                        <a href="products.php" class="btn btn-sm btn-outline-primary">
+                        <a href="../modules/products/products.php" class="btn btn-sm btn-outline-primary">
                             <i class="fas fa-eye me-1"></i>
                             Ver Todos
                         </a>
@@ -338,25 +338,25 @@ try {
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <a href="add_product.php" class="btn btn-outline-primary w-100">
+                        <a href="../modules/products/add_product.php" class="btn btn-outline-primary w-100">
                             <i class="fas fa-plus-circle me-2"></i>
                             Adicionar Produto
                         </a>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <a href="scanner.php" class="btn btn-outline-primary w-100">
+                        <a href="../modules/barcode/scanner.php" class="btn btn-outline-primary w-100">
                             <i class="fas fa-qrcode me-2"></i>
                             Scanner QR/Código
                         </a>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <a href="ready_machines.php" class="btn btn-outline-primary w-100">
+                        <a href="../modules/machines/ready_machines.php" class="btn btn-outline-primary w-100">
                             <i class="fas fa-desktop me-2"></i>
                             Máquinas
                         </a>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <a href="products.php" class="btn btn-outline-primary w-100">
+                        <a href="../modules/products/products.php" class="btn btn-outline-primary w-100">
                             <i class="fas fa-boxes me-2"></i>
                             Ver Todos Produtos
                         </a>
@@ -431,26 +431,16 @@ try {
     <div class="col-12">
         <div class="card card-custom">
             <div class="card-header card-header-custom">
-                <i class="fas fa-cogs me-2"></i>
+                <i class="fas fa-info-circle me-2"></i>
                 Informações do Sistema
             </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6>Estatísticas Gerais:</h6>
-                        <ul class="list-unstyled">
-                            <li><strong>Total de Usuários:</strong> <?php echo $total_users; ?></li>
-                            <li><strong>Produtos Adicionados (7 dias):</strong> <?php echo $recent_products; ?></li>
-                            <li><strong>Versão do Sistema:</strong> 1.0</li>
-                            <li><strong>Última Atualização:</strong> <?php echo date('d/m/Y'); ?></li>
-                        </ul>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Versão:</strong> 1.0
                     </div>
-                    <div class="col-md-6">
-                        <h6>Ações Administrativas:</h6>
-                        <div class="text-muted text-center py-3">
-                            <i class="fas fa-info-circle me-2"></i>
-                            Use o menu lateral para acessar as funcionalidades administrativas.
-                        </div>
+                    <div class="text-muted">
+                        <small>Atualizado em <?php echo date('d/m/Y'); ?></small>
                     </div>
                 </div>
             </div>
@@ -507,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>
 
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

@@ -298,27 +298,40 @@ function openDeleteModal(type, id, name) {
     let url = '';
 
     switch(type) {
-        case 'product': itemType = 'produto'; url = 'delete_product.php'; break;
-        case 'machine': itemType = 'máquina'; url = 'delete_machine.php'; break;
-        case 'user': itemType = 'usuário'; url = 'modules/users/delete_user.php'; break;
-        case 'warehouse': itemType = 'item de warehouse'; url = 'delete_warehouse.php'; break;
+        case 'product': itemType = 'produto'; url = '/sistema5/modules/products/delete_product.php'; break;
+        case 'machine': itemType = 'máquina'; url = '/sistema5/modules/machines/delete_machine.php'; break;
+        case 'user': itemType = 'usuário'; url = '/sistema5/modules/users/delete_user.php'; break;
+        case 'warehouse': itemType = 'item de warehouse'; url = '/sistema5/modules/warehouses/delete_warehouse.php'; break;
         default: console.error('Tipo de exclusão desconhecido:', type); return;
     }
 
+    // Pedir confirmação antes de deletar
+    const confirmMessage = `Deseja realmente excluir o ${itemType} "${name}"?`;
+    
     const deleteFunction = () => {
+        console.log(`🗑️ Deletando ${itemType}, URL: ${url}`); // DEBUG
         fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erro HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
-                showAlert(data.message, 'success');
+                showAlert(`✅ ${itemType.charAt(0).toUpperCase() + itemType.slice(1)} "${name}" foi deletado com sucesso!`, 'success');
                 setTimeout(() => location.reload(), 1500);
             } else {
-                showAlert(data.message, 'danger');
+                showAlert(`❌ Não foi possível deletar ${itemType}: ${data.message || 'Erro desconhecido'}`, 'danger');
             }
+        })
+        .catch(error => {
+            console.error('Erro ao deletar:', error);
+            showAlert(`❌ Erro ao deletar ${itemType}: ${error.message}`, 'danger');
         });
     };
 
@@ -382,7 +395,7 @@ function setupImageUpload(options) {
         formData.append('type', itemType);
         formData.append('id', itemId);
 
-        fetch('upload_image.php', { method: 'POST', body: formData })
+        fetch('../utilities/upload_image.php', { method: 'POST', body: formData })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {

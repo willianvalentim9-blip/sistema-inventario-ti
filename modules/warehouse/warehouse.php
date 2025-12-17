@@ -3,14 +3,9 @@ require_once '../../config.php';
 requireLogin();
 
 // ========================================
-// VERIFICAÇÃO DE ACESSO - APENAS ADMINISTRATIVOS E ADMIN
+// VERIFICAÇÃO DE ACESSO - LEITURA PARA TODOS, EDIÇÃO PARA ADMIN E ADMINISTRATIVO
 // ========================================
-if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'admin')) {
-    $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem acessar o armazém.';
-    $_SESSION['flash_type'] = 'danger';
-    header('Location: ../../dashboard.php');
-    exit;
-}
+$can_edit_warehouse = isset($_SESSION['user_role']) && ($_SESSION['user_role'] === 'admin' || $_SESSION['user_role'] === 'administrativo');
 
 $page_title = 'Armazém';
 
@@ -91,13 +86,15 @@ if (isset($_SESSION["flash_message"])) {
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2 text-primary-custom"><i class="fas fa-warehouse me-2"></i> Armazém <span class="badge badge-custom-secondary ms-2"><?php echo number_format($total_items); ?></span></h1>
     <div class="btn-toolbar mb-2 mb-md-0">
+        <?php if ($can_edit_warehouse): ?>
         <div class="btn-group me-2">
             <a href="add_warehouse.php" class="btn btn-sm btn-primary-custom"><i class="fas fa-plus me-1"></i> Novo Item</a>
         </div>
 
         <div class="btn-group me-2">
-            <a href="scanner.php?type=warehouse" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
+            <a href="../barcode/scanner.php?type=warehouse" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
         </div>
+        <?php endif; ?>
 
         <div class="btn-group">
             <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
@@ -165,11 +162,13 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                 <td><span class="badge <?php echo getStatusBadgeClass($item['status']); ?>"><?php echo getStatusText($item['status']); ?></span></td>
                 <td><div class="btn-group btn-group-sm">
                     <button type="button" class="btn btn-outline-primary" onclick="openActionModal('view_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Visualizar: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Visualizar"><i class="fas fa-eye"></i></button>
+                    <?php if ($can_edit_warehouse): ?>
                     <button type="button" class="btn btn-outline-secondary" onclick="openActionModal('edit_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Editar: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Editar"><i class="fas fa-edit"></i></button>
                     <a href="../barcode/barcode_print.php?warehouse_id=<?php echo $item['id']; ?>" class="btn btn-outline-info" data-bs-toggle="tooltip" title="Imprimir Código de Barras" target="_blank"><i class="fas fa-barcode"></i></a>
                     <button type="button" class="btn btn-outline-success" onclick="openWarehouseStockInModal(<?php echo $item['id']; ?>, '<?php echo htmlspecialchars(addslashes($item['name'])); ?>', <?php echo $item['quantity']; ?>, <?php echo $item['max_quantity'] ?? 0; ?>)" data-bs-toggle="tooltip" title="Dar Entrada"><i class="fas fa-plus-circle"></i></button>
                     <button type="button" class="btn btn-outline-warning" onclick="openWarehouseStockOutModal(<?php echo $item['id']; ?>, '<?php echo htmlspecialchars(addslashes($item['name'])); ?>', <?php echo $item['quantity']; ?>)" data-bs-toggle="tooltip" title="Dar Baixa"><i class="fas fa-minus-circle"></i></button>
                     <button type="button" class="btn btn-outline-danger" onclick="openDeleteModal('warehouse', <?php echo $item['id']; ?>, '<?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Excluir"><i class="fas fa-trash"></i></button>
+                    <?php endif; ?>
                     <button type="button" class="btn btn-outline-secondary" onclick="openHistoryModal('warehouse_history_view.php?id=<?php echo $item['id']; ?>&modal=true', 'Histórico: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')" data-bs-toggle="tooltip" title="Ver Histórico"><i class="fas fa-history"></i></button>
                 </div></td>
             </tr>
@@ -191,7 +190,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                     <div class="card-img-container position-relative">
                         <?php if (!empty($item['image'])): ?>
                             <img
-                                src="uploads/warehouse/<?php echo htmlspecialchars($item['image']); ?>"
+                                src="../../uploads/warehouse/<?php echo htmlspecialchars($item['image']); ?>"
                                 class="card-img-top"
                                 alt="<?php echo htmlspecialchars($item['name']); ?>"
                                 style="height: 180px; object-fit: cover;"
@@ -284,6 +283,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                                     data-bs-toggle="tooltip" title="Visualizar">
                                 <i class="fas fa-eye"></i>
                             </button>
+                            <?php if ($can_edit_warehouse): ?>
                             <button type="button" class="btn btn-outline-secondary"
                                     onclick="openActionModal('edit_warehouse.php?id=<?php echo $item['id']; ?>&modal=true', 'Editar: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')"
                                     data-bs-toggle="tooltip" title="Editar">
@@ -310,6 +310,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                                     data-bs-toggle="tooltip" title="Excluir">
                                 <i class="fas fa-trash"></i>
                             </button>
+                            <?php endif; ?>
                             <button type="button" class="btn btn-outline-secondary"
                                     onclick="openHistoryModal('warehouse_history_view.php?id=<?php echo $item['id']; ?>&modal=true', 'Histórico: <?php echo htmlspecialchars(addslashes($item['name'])); ?>')"
                                     data-bs-toggle="tooltip" title="Ver Histórico">

@@ -95,7 +95,7 @@ if (isset($_SESSION["flash_message"])) {
         </div>
 
         <div class="btn-group me-2">
-            <a href="../../scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
+            <a href="../barcode/scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a>
         </div>
 
         <div class="btn-group">
@@ -188,7 +188,7 @@ function getQuantityBadgeClass($quantity, $min_quantity) {
                     <!-- Imagem/Ícone -->
                     <div class="card-img-container position-relative">
                         <?php if (!empty($product['image'])): ?>
-                            <img src="uploads/products/<?php echo htmlspecialchars($product['image']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['name']); ?>" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <img src="../../uploads/products/<?php echo htmlspecialchars($product['image']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['name']); ?>" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                             <div class="product-icon-placeholder" style="display: none; height: 180px; align-items: center; justify-content: center;">
                                 <i class="fas <?php echo getCategoryIcon($product['category']); ?> fa-3x text-muted"></i>
                             </div>

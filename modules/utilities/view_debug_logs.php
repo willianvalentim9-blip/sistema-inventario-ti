@@ -24,7 +24,7 @@ if (isset($_GET['clear']) && $_GET['clear'] === '1') {
     exit;
 }
 ?>
-<?php include 'includes/header.php'; ?>
+<?php include '../../includes/header.php'; ?>
 
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -93,4 +93,4 @@ setTimeout(function() {
 }, 5000);
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>

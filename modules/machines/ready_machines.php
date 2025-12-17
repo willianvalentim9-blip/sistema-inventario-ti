@@ -128,7 +128,7 @@ if (!empty($session_success)) {
     <h1 class="h2 text-primary-custom"><i class="fas fa-desktop me-2"></i> Máquinas<span class="badge badge-custom-secondary ms-2"><?php echo number_format($total_machines); ?></span></h1>
     <div class="btn-toolbar mb-2 mb-md-0">
         <div class="btn-group me-2"><a href="add_machine.php" class="btn btn-sm btn-primary-custom"><i class="fas fa-plus me-1"></i> Nova Máquina</a></div>
-        <div class="btn-group me-2"><a href="../../scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a></div>
+        <div class="btn-group me-2"><a href="../barcode/scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i> Scanner</a></div>
         <div class="btn-group">
             <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
                 <i class="fas fa-download me-1"></i> Exportar Dados

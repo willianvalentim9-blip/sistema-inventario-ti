@@ -128,7 +128,7 @@ if (!$is_modal) {
             <div class="card-header card-header-custom"><i class="fas fa-image me-2"></i> Imagem da Máquina</div>
             <div class="card-body text-center">
                 <?php if (!empty($machine['image']) && file_exists('uploads/machines/' . $machine['image'])): ?>
-                    <img src="uploads/machines/<?php echo htmlspecialchars($machine["image"]); ?>" alt="<?php echo htmlspecialchars($machine["name"]); ?>" class="img-fluid rounded mb-3" style="max-height: 200px; object-fit: cover;">
+                    <img src="../../uploads/machines/<?php echo htmlspecialchars($machine["image"]); ?>" alt="<?php echo htmlspecialchars($machine["name"]); ?>" class="img-fluid rounded mb-3" style="max-height: 200px; object-fit: cover;">
                     <p class="file-name-text"><?php echo htmlspecialchars($machine["image"]); ?></p>
                 <?php else: ?>
                     <div class="py-4">

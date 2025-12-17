@@ -15,6 +15,11 @@ try {
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([$user_id]);
     $user = $stmt->fetch();
+    
+    // Se não encontrar o usuário, retornar erro
+    if (!$user) {
+        die("Usuário não encontrado.");
+    }
 } catch (PDOException $e) {
     die("Erro ao carregar dados do usuário.");
 }
@@ -27,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $full_name = trim($_POST['full_name']);
         $username = trim($_POST['username']);
         $email = trim($_POST['email']);
-        $theme = trim($_POST['theme']);
+        $theme = trim($_POST['theme'] ?? '');
         
         try {
             $stmt = $pdo->prepare("UPDATE users SET full_name = ?, username = ?, email = ?, theme = ? WHERE id = ?");
@@ -79,10 +84,16 @@ include '../../includes/header.php';
 </div>
 
 <?php if ($error_message): ?>
-<div class="alert alert-danger"><?php echo $error_message; ?></div>
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="fas fa-exclamation-circle me-2"></i><?php echo $error_message; ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
 <?php endif; ?>
 <?php if ($success_message): ?>
-<div class="alert alert-success"><?php echo $success_message; ?></div>
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="fas fa-check-circle me-2"></i><?php echo $success_message; ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
 <?php endif; ?>
 
 <div class="row">
@@ -92,10 +103,11 @@ include '../../includes/header.php';
                 
                 <div class="profile-avatar-container mb-3">
                     <?php
-                    $avatar_path = 'uploads/avatars/' . ($user['avatar'] ?? '');
-                    if (!empty($user['avatar']) && file_exists($avatar_path)):
+                    $avatar_path = '../../uploads/avatars/' . ($user['avatar'] ?? '');
+                    $avatar_full_path = __DIR__ . '/../../uploads/avatars/' . ($user['avatar'] ?? '');
+                    if (!empty($user['avatar']) && file_exists($avatar_full_path)):
                     ?>
-                        <img src="<?php echo htmlspecialchars($avatar_path) . '?v=' . time(); ?>" 
+                        <img src="<?php echo htmlspecialchars('/sistema5/uploads/avatars/' . $user['avatar']) . '?v=' . time(); ?>" 
                              alt="Avatar do Usuário" 
                              class="img-thumbnail rounded-circle" 
                              style="width: 150px; height: 150px; object-fit: cover;">
@@ -105,10 +117,19 @@ include '../../includes/header.php';
                         </div>
                     <?php endif; ?>
                 </div>
-                <h4 class="card-title"><?php echo htmlspecialchars($user['full_name'] ?: $user['username']); ?></h4>
-                <p class="text-muted"><?php echo htmlspecialchars($user['email']); ?></p>
-                <span class="badge <?php echo $user['role'] === 'admin' ? 'bg-warning text-dark' : 'bg-info'; ?>">
-                    <?php echo ucfirst($user['role']); ?>
+                <h4 class="card-title"><?php echo htmlspecialchars(($user['full_name'] ?? '') ?: ($user['username'] ?? 'Usuário')); ?></h4>
+                <p class="text-muted"><?php echo htmlspecialchars($user['email'] ?? ''); ?></p>
+                <span class="badge <?php 
+                    $badge_class = 'bg-info';
+                    $role = $user['role'] ?? 'user';
+                    if ($role === 'admin') {
+                        $badge_class = 'bg-warning text-dark';
+                    } elseif ($role === 'administrativo') {
+                        $badge_class = 'bg-success text-white';
+                    }
+                    echo $badge_class;
+                ?>">
+                    <?php echo ucfirst($role); ?>
                 </span>
 
                 <div class="mt-3">
@@ -147,15 +168,15 @@ include '../../includes/header.php';
                             <input type="hidden" name="action" value="update_profile">
                             <div class="mb-3">
                                 <label for="full_name" class="form-label">Nome Completo</label>
-                                <input type="text" class="form-control" id="full_name" name="full_name" value="<?php echo htmlspecialchars($user['full_name']); ?>">
+                                <input type="text" class="form-control" id="full_name" name="full_name" value="<?php echo htmlspecialchars($user['full_name'] ?? ''); ?>">
                             </div>
                             <div class="mb-3">
                                 <label for="username" class="form-label">Nome de Usuário</label>
-                                <input type="text" class="form-control" id="username" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
+                                <input type="text" class="form-control" id="username" name="username" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" required>
                             </div>
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email</label>
-                                <input type="email" class="form-control" id="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+                                <input type="email" class="form-control" id="email" name="email" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" required>
                             </div>
                            
                             <button type="submit" class="btn btn-primary-custom"><i class="fas fa-save me-1"></i> Salvar Alterações</button>
@@ -242,56 +263,60 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('avatar', file);
         
-        showAlert('Enviando nova foto...', 'info', 0);
+        // Mostrar loading
+        const btn = document.querySelector('[onclick*="avatar-input"]');
+        if (btn) btn.disabled = true;
 
-        fetch('update_avatar.php', {
+        fetch('/sistema5/modules/users/update_avatar.php', {
             method: 'POST',
             body: formData
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                location.reload();
+                // Usar setTimeout para permitir que o servidor processe antes de recarregar
+                setTimeout(() => location.reload(), 500);
             } else {
-                showAlert(data.message || 'Erro ao enviar a imagem.', 'error');
+                alert(data.message || 'Erro ao enviar a imagem.');
+                if (btn) btn.disabled = false;
             }
         })
         .catch(error => {
-            showAlert('Erro de comunicação. Tente novamente.', 'error');
             console.error('Error:', error);
+            alert('Erro de comunicação. Tente novamente.');
+            if (btn) btn.disabled = false;
         });
     };
 
     // Função para remover via AJAX
     const removeAvatar = () => {
-        showConfirmation({
-            title: 'Remover Foto',
-            message: 'Tem certeza que deseja remover sua foto de perfil?',
-            type: 'danger',
-            confirmText: 'Sim, Remover',
-            onConfirm: () => {
-                const formData = new FormData();
-                formData.append('remove_avatar', '1');
+        if (!confirm('Tem certeza que deseja remover sua foto de perfil?')) {
+            return;
+        }
 
-                showAlert('Removendo foto...', 'info', 0);
+        const formData = new FormData();
+        formData.append('remove_avatar', '1');
 
-                fetch('update_avatar.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        showAlert(data.message || 'Erro ao remover a imagem.', 'error');
-                    }
-                })
-                .catch(error => {
-                    showAlert('Erro de comunicação. Tente novamente.', 'error');
-                    console.error('Error:', error);
-                });
+        const btn = document.getElementById('remove-avatar-btn');
+        if (btn) btn.disabled = true;
+
+        fetch('/sistema5/modules/users/update_avatar.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                setTimeout(() => location.reload(), 500);
+            } else {
+                alert(data.message || 'Erro ao remover a imagem.');
+                if (btn) btn.disabled = false;
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erro de comunicação. Tente novamente.');
+            if (btn) btn.disabled = false;
         });
     };
 
@@ -306,6 +331,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (removeBtn) {
         removeBtn.addEventListener('click', removeAvatar);
     }
+
+    // Auto-descartar alertas após 5 segundos
+    const alerts = document.querySelectorAll('.alert-dismissible');
+    alerts.forEach(alert => {
+        setTimeout(() => {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }, 5000);
+    });
 });
 </script>
 

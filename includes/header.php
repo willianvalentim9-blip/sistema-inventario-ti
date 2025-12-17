@@ -52,7 +52,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
             
             <ul class="nav nav-pills flex-column mb-auto px-2">
                 <li class="nav-item">
-                    <a href="<?php echo url('dashboard.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
+                    <a href="<?php echo url('public/dashboard.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
                         <i class="fas fa-tachometer-alt fa-fw animate-float"></i>
                         <span class="sidebar-text">Dashboard</span>
                     </a>
@@ -114,21 +114,24 @@ $logo_path = $system_settings['company_logo'] ?? '';
 
                 <?php if (isAdmin()): ?>
                     <li class="nav-item">
-                        <a href="<?php echo url('deleted_items.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>">
+                        <a href="<?php echo url('modules/utilities/deleted_items.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'deleted_items.php' ? 'active' : ''; ?>">
                             <i class="fas fa-trash-restore fa-fw animate-blink"></i>
                             <span class="sidebar-text">Itens Deletados</span>
                         </a>
                     </li>
                 <?php endif; ?>
 
-                <?php if (isAdmin()): ?>
+                <?php if (isSuperAdmin()): ?>
                     <hr class="sidebar-divider my-2">
-                    <li><a href="<?php echo url('users.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>"><i class="fas fa-users fa-fw animate-shake"></i><span class="sidebar-text">Usuários</span></a></li>
-                    <li><a href="<?php echo url('settings.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>"><i class="fas fa-cogs fa-fw animate-spin"></i><span class="sidebar-text">Configurações</span></a></li>
+                    <li><a href="<?php echo url('modules/users/users.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>"><i class="fas fa-users fa-fw animate-shake"></i><span class="sidebar-text">Usuários</span></a></li>
+                    <li><a href="<?php echo url('modules/utilities/settings.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>"><i class="fas fa-cogs fa-fw animate-spin"></i><span class="sidebar-text">Configurações</span></a></li>
+                <?php elseif (isAdmin()): ?>
+                    <hr class="sidebar-divider my-2">
+                    <li><a href="<?php echo url('modules/utilities/settings.php'); ?>" class="nav-link sidebar-link <?php echo basename($_SERVER["PHP_SELF"]) == 'settings.php' ? 'active' : ''; ?>"><i class="fas fa-cogs fa-fw animate-spin"></i><span class="sidebar-text">Configurações</span></a></li>
                 <?php endif; ?>
             </ul>
-             <hr class="text-white-50 mx-2">
-             <div class="px-2 pb-3">
+             <hr class="text-white-50 mx-3">
+             <div class="px-3 pb-3">
                  <a href="<?php echo url('logout.php'); ?>" class="nav-link sidebar-link"><i class="fas fa-sign-out-alt fa-fw"></i><span class="sidebar-text">Sair</span></a>
             </div>
         </nav>
@@ -136,7 +139,7 @@ $logo_path = $system_settings['company_logo'] ?? '';
         
     <div id="main-content-wrapper" class="d-flex flex-column flex-grow-1">
         <?php if (isLoggedIn() && !isset($hide_sidebar)): ?>
-        <header class="d-flex align-items-center py-2 px-3 border-bottom bg-light no-print">
+        <header class="d-flex align-items-center px-3 border-bottom bg-light no-print" style="height: 60px; min-height: 60px;">
             
             <ul class="navbar-nav d-flex flex-row align-items-center w-100">
 
@@ -147,36 +150,76 @@ $logo_path = $system_settings['company_logo'] ?? '';
                 </li>
 
                 <li class="nav-item">
-                    <a href="<?php echo url('dashboard.php'); ?>" class="navbar-brand-logo">
-                        <?php if (!empty($logo_path) && file_exists($logo_path)): ?>
-                            <img src="<?php echo htmlspecialchars($logo_path); ?>?v=<?php echo time(); ?>" alt="Logo da Empresa">
-                        <?php endif; ?>
+                    <a href="<?php echo url('public/dashboard.php'); ?>" class="navbar-brand-logo">
+                        <?php if (!empty($logo_path)):
+                            $full_logo_path = __DIR__ . '/../' . $logo_path;
+                            if (file_exists($full_logo_path)):
+                        ?>
+                            <img src="/sistema5/<?php echo htmlspecialchars($logo_path); ?>?v=<?php echo time(); ?>" alt="Logo da Empresa">
+                        <?php
+                            endif;
+                        endif; ?>
                     </a>
                 </li>
         
                 <li class="nav-item ms-auto">
-                    <button id="theme-toggle" class="btn btn-sm btn-outline-secondary" title="Alternar Tema">
-                        <i class="fas fa-moon"></i>
+                    <button id="theme-toggle" class="btn btn-outline-secondary" title="Alternar Tema" style="padding: 0.5rem 0.75rem;">
+                        <i class="fas fa-moon" style="font-size: 1.1rem;"></i>
                     </button>
                 </li>
 
                 <li class="nav-item dropdown ms-2">
-                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center p-1" href="#" role="button" data-bs-toggle="dropdown">
+                    <a class="nav-link dropdown-toggle text-dark d-flex align-items-center py-2 px-2" href="#" role="button" data-bs-toggle="dropdown" style="font-size: 1.05rem;">
                         <?php
                         $user_avatar = $_SESSION['user_avatar'] ?? '';
-                        $avatar_path = __ROOT__ . '/uploads/avatars/' . $user_avatar;
-                        if (!empty($user_avatar) && file_exists($avatar_path)) {
-                            echo '<img src="/sistema5/uploads/avatars/' . htmlspecialchars($user_avatar) . '?v=' . time() . '" alt="Avatar" class="rounded-circle me-2" style="width: 55px; height: 55px; object-fit: cover;">';
+                        $has_avatar = false;
+                        
+                        // Se não tem em sessão, tentar carregar do banco
+                        if (empty($user_avatar) && isset($_SESSION['user_id'])) {
+                            try {
+                                $pdo = getConnection();
+                                $stmt = $pdo->prepare("SELECT avatar FROM users WHERE id = ?");
+                                $stmt->execute([$_SESSION['user_id']]);
+                                $result = $stmt->fetch();
+                                if ($result && !empty($result['avatar'])) {
+                                    $user_avatar = $result['avatar'];
+                                    $_SESSION['user_avatar'] = $user_avatar;
+                                }
+                            } catch (Exception $e) {
+                                // Silenciosamente falhar e usar ícone
+                            }
+                        }
+                        
+                        // Verificar se arquivo existe
+                        if (!empty($user_avatar)) {
+                            // Tentar vários caminhos possíveis
+                            $possible_paths = [
+                                $_SERVER['DOCUMENT_ROOT'] . '/sistema5/uploads/avatars/' . $user_avatar,
+                                $_SERVER['DOCUMENT_ROOT'] . '/uploads/avatars/' . $user_avatar,
+                                __DIR__ . '/../uploads/avatars/' . $user_avatar,
+                            ];
+                            
+                            foreach ($possible_paths as $path) {
+                                if (file_exists($path)) {
+                                    $has_avatar = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Exibir imagem ou ícone
+                        if ($has_avatar) {
+                            echo '<img src="/sistema5/uploads/avatars/' . htmlspecialchars($user_avatar) . '?v=' . time() . '" alt="Avatar" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #ddd;">';
                         } else {
-                            echo '<i class="fas fa-user-circle avatar-icon me-2 fs-4"></i>';
+                            echo '<i class="fas fa-user-circle avatar-icon me-2" style="font-size: 2rem;"></i>';
                         }
                         ?>
-                        <?php echo htmlspecialchars($_SESSION["username"] ?? "Usuário"); ?>
+                        <span class="fw-semibold"><?php echo htmlspecialchars($_SESSION["username"] ?? "Usuário"); ?></span>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="<?php echo url('modules/users/profile.php'); ?>"><i class="fas fa-user-edit me-2"></i>Meu Perfil</a></li>
                         <?php if (isAdmin()): ?>
-                            <li><a class="dropdown-item" href="<?php echo url('settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
+                            <li><a class="dropdown-item" href="<?php echo url('modules/utilities/settings.php'); ?>"><i class="fas fa-cogs me-2"></i>Configurações</a></li>
                         <?php endif; ?>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="<?php echo url('logout.php'); ?>"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>

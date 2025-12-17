@@ -137,18 +137,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $has_warranty ? $invoice_number : null, $has_warranty ? $warranty_notes : null,
             $product_id
         ]);
-        
         $new_data_stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND (is_deleted = FALSE OR is_deleted IS NULL)");
         $new_data_stmt->execute([$product_id]);
         $new_data = $new_data_stmt->fetch();
 
-        logAdminActivity($_SESSION["user_id"], "UPDATE", "products", $product_id, $old_data, $new_data);
+        // ⭐ NOVO: Apenas registra log se houver alterações reais
+        $data_changed = hasDataChanged($old_data, $new_data);
+        if ($data_changed) {
+            logAdminActivity($_SESSION["user_id"], "UPDATE", "products", $product_id, $old_data, $new_data);
+        }
 
         $pdo->commit();
         
-        // Seta a mensagem de sucesso
-        $_SESSION['flash_message'] = 'Produto atualizado com sucesso!';
-        $_SESSION['flash_type'] = 'success';
+        // ⭐ NOVO: Apenas mostra mensagem se houve alterações
+        if ($data_changed) {
+            $_SESSION['flash_message'] = 'Produto atualizado com sucesso!';
+            $_SESSION['flash_type'] = 'success';
+        }
 
         // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
         // Se NÃO tinha garantia antes e AGORA foi marcado has_warranty = 1, vai para ../warranties/warranties.php
@@ -182,7 +187,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $form_message = '';
 if (isset($_SESSION['flash_message'])) {
     $alert_type = $_SESSION['flash_type'] === 'success' ? 'success' : 'danger';
-    $form_message = '<div class="alert alert-'. $alert_type . '">' . htmlspecialchars($_SESSION['flash_message']) . '</div>';
+    $icon = $alert_type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    $form_message = '
+    <div class="alert alert-'.$alert_type.' fade show" role="alert" id="mainAlert">
+        <i class="fas '.$icon.' me-2"></i>' . htmlspecialchars($_SESSION['flash_message']) . '
+    </div>
+    <script>
+        // Auto-desaparece após 5 segundos
+        setTimeout(() => {
+            const alert = document.getElementById("mainAlert");
+            if (alert) {
+                alert.style.transition = "opacity 0.5s ease-out";
+                alert.style.opacity = "0";
+                setTimeout(() => alert.remove(), 500);
+            }
+        }, 5000);
+    </script>';
     unset($_SESSION['flash_message']);
     unset($_SESSION['flash_type']);
 }
@@ -272,7 +292,7 @@ if (!$is_modal) {
                         </div>
                     </div>
                     <div class="media-upload-preview" style="<?php echo empty($product['image']) ? 'display: none;' : ''; ?>">
-                        <img class="media-upload-preview-image" src="<?php echo !empty($product['image']) ? 'uploads/products/' . htmlspecialchars($product['image']) : ''; ?>" alt="Preview">
+                        <img class="media-upload-preview-image" src="<?php echo !empty($product['image']) ? '../../uploads/products/' . htmlspecialchars($product['image']) : ''; ?>" alt="Preview">
                         <div class="media-upload-preview-overlay">
                             <button type="button" class="media-upload-action-btn" data-action="change" title="Trocar imagem">
                                 <i class="fas fa-camera"></i>
@@ -403,7 +423,7 @@ if (!$is_modal) {
     // Include modal apenas quando não estiver em modo modal
     // Senão o modal será editado em ../warranties/warranties.php
     $GLOBALS['is_inside_product_form'] = true;
-    include 'includes/warranty_modal_edit_inline.php'; 
+    include '../../includes/warranty_modal_edit_inline.php'; 
     include '../../includes/footer.php'; 
 } 
 ?>

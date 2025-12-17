@@ -112,7 +112,7 @@ try {
 }
 ?>
 
-<?php include 'includes/header.php'; ?>
+<?php include '../../includes/header.php'; ?>
 
 <!-- ========================================
      CABEÇALHO DA PÁGINA
@@ -365,5 +365,5 @@ function exportCSV() {
 }
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>
 

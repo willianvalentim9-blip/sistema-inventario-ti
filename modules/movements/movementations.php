@@ -353,7 +353,6 @@ include '../../includes/header.php';
                     <th>Quantidade</th>
                     <th>Motivo</th>
                     <th>Usuário</th>
-                    <th>Ação</th>
                 </tr>
             </thead>
             <tbody>
@@ -391,17 +390,6 @@ include '../../includes/header.php';
                     </td>
                     <td>
                         <small><?php echo htmlspecialchars($mov['full_name'] ?? $mov['username'] ?? 'Sistema'); ?></small>
-                    </td>
-                    <td>
-                        <?php if ($item_type === 'maquina'): ?>
-                            <a href="../machines/machine_history_view.php?id=<?php echo $mov['machine_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
-                                <i class="fas fa-history"></i>
-                            </a>
-                        <?php else: ?>
-                            <a href="../products/product_history_view.php?id=<?php echo $mov['product_id']; ?>" class="btn btn-sm btn-outline-primary" title="Ver histórico">
-                                <i class="fas fa-history"></i>
-                            </a>
-                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>

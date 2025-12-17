@@ -43,6 +43,6 @@ session_start();
 $_SESSION['logout_message'] = 'Você foi desconectado com sucesso.';
 
 // Redireciona para a página de login
-header("Location: login.php");
+header("Location: ./login.php");
 exit();
 ?>

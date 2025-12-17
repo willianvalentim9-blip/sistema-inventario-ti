@@ -16,7 +16,7 @@ if (!isset($_SESSION['user_id'])) {
 
 // Verificar permissão de admin
 if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
-    header('Location: ../../dashboard.php');
+    header('Location: ../../public/dashboard.php');
     exit;
 }
 

@@ -151,7 +151,7 @@ try {
 }
 ?>
 
-<?php include 'includes/header.php'; ?>
+<?php include '../../includes/header.php'; ?>
 
 <!-- ========================================
      CABEÇALHO DA PÁGINA
@@ -430,5 +430,5 @@ document.getElementById('movement_type').addEventListener('change', function() {
 });
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php include '../../includes/footer.php'; ?>
 

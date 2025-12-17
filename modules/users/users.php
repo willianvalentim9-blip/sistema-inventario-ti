@@ -10,7 +10,7 @@ require_once '../../config.php';
 // Verifica se o usuário está logado e é admin
 requireLogin();
 if ($_SESSION['user_role'] !== 'admin') {
-    header('Location: ../../dashboard.php');
+    header('Location: ../../public/dashboard.php');
     exit;
 }
 
@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (strlen($password) < 6) {
             $_SESSION['flash_message'] = 'A senha deve ter pelo menos 6 caracteres.';
             $_SESSION['flash_type'] = 'danger';
+        } elseif (!in_array($role, ['admin', 'user', 'administrativo'])) {
+            $_SESSION['flash_message'] = 'Função inválida.';
+            $_SESSION['flash_type'] = 'danger';
         } else {
             try {
                 $pdo = getConnection();
@@ -58,8 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
                         // Insere o novo usuário com senha simples
                         $stmt = $pdo->prepare("
-                            INSERT INTO users (username, email, password, role, full_name) 
-                            VALUES (?, ?, ?, ?, ?)
+                            INSERT INTO users (username, email, password, role, full_name, is_deleted) 
+                            VALUES (?, ?, ?, ?, ?, FALSE)
                         ");
                         $stmt->execute([$username, $email, $password, $role, $full_name]);
                         $_SESSION['flash_message'] = 'Usuário adicionado com sucesso!';
@@ -73,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         // Redireciona para a mesma página para mostrar a notificação e limpar o POST
-        header("Location: users.php");
+        header("Location: ./users.php");
         exit();
     }
 }
@@ -107,6 +110,13 @@ if (!empty($where_conditions)) {
     $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 }
 
+// Adiciona filtro para excluir usuários deletados (soft delete)
+if (empty($where_clause)) {
+    $where_clause = 'WHERE (is_deleted = FALSE OR is_deleted IS NULL)';
+} else {
+    $where_clause .= ' AND (is_deleted = FALSE OR is_deleted IS NULL)';
+}
+
 try {
     $pdo = getConnection();
     
@@ -132,6 +142,7 @@ try {
             COUNT(CASE WHEN role = 'user' THEN 1 END) as regular_users,
             COUNT(CASE WHEN last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as active_users
         FROM users
+        WHERE (is_deleted = FALSE OR is_deleted IS NULL)
     ");
     $stats = $stats_stmt->fetch();
     
@@ -268,7 +279,7 @@ if (isset($_SESSION["flash_message"])) {
         
         <?php if (!empty($search) || !empty($role_filter)): ?>
             <div class="mt-3">
-                <a href="users.php" class="btn btn-outline-secondary btn-sm">
+                <a href="./users.php" class="btn btn-outline-secondary btn-sm">
                     <i class="fas fa-times me-1"></i>
                     Limpar Filtros
                 </a>
@@ -318,7 +329,7 @@ if (isset($_SESSION["flash_message"])) {
                                         $badge_class = 'bg-warning text-dark';
                                         $role_label = 'Administrador';
                                     } elseif ($user['role'] === 'administrativo') {
-                                        $badge_class = 'bg-purple text-white';
+                                        $badge_class = 'bg-success text-white';
                                         $role_label = 'Administrativo';
                                     }
                                     ?>
@@ -344,6 +355,13 @@ if (isset($_SESSION["flash_message"])) {
                                                 data-bs-toggle="tooltip" 
                                                 title="Editar">
                                             <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" 
+                                                class="btn btn-outline-info" 
+                                                onclick="showUserHistory(<?php echo $user['id']; ?>, '<?php echo htmlspecialchars(addslashes($user['username'])); ?>')"
+                                                data-bs-toggle="tooltip" 
+                                                title="Histórico">
+                                            <i class="fas fa-history"></i>
                                         </button>
                                         <?php if ($user["id"] != $_SESSION["user_id"]): ?>
                                             <button type="button" 
@@ -386,7 +404,7 @@ if (isset($_SESSION["flash_message"])) {
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form method="POST" action="users.php">
+                <form method="POST" action="./users.php">
                     <input type="hidden" name="action" value="add_user">
                     <div class="mb-3">
                         <label for="full_name" class="form-label">Nome Completo</label>
@@ -405,8 +423,8 @@ if (isset($_SESSION["flash_message"])) {
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
                     <div class="mb-3">
-                        <label for="role" class="form-label">Função</label>
-                        <select class="form-select" id="role" name="role">
+                        <label for="add_role" class="form-label">Função</label>
+                        <select class="form-select" id="add_role" name="role">
                             <option value="user">Usuário</option>
                             <option value="admin">Administrador</option>
                             <option value="administrativo">Administrativo</option>
@@ -419,9 +437,178 @@ if (isset($_SESSION["flash_message"])) {
     </div>
 </div>
 
+<!-- Modal: Histórico do Usuário -->
+<div class="modal fade" id="userHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-history me-2"></i>Histórico do Usuário: <span id="historyUserName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="historyContent" class="table-responsive">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Carregando...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Detalhes da Alteração -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detalhes da Alteração</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Valores Anteriores</h6>
+                        <pre id="oldValues" class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;"><small>Carregando...</small></pre>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Valores Novos</h6>
+                        <pre id="newValues" class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;"><small>Carregando...</small></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php include '../../includes/footer.php'; ?>
 
 <script>
+// Função para exibir histórico do usuário
+function showUserHistory(userId, userName) {
+    document.getElementById('historyUserName').textContent = userName;
+    const historyModal = new bootstrap.Modal(document.getElementById('userHistoryModal'));
+    historyModal.show();
+    
+    // Carrega o histórico via AJAX
+    fetch(`../../api/get_user_history.php?user_id=${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.logs && data.logs.length > 0) {
+                let html = `
+                    <table class="table table-hover table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th><i class="fas fa-clock me-2"></i>Data/Hora</th>
+                                <th><i class="fas fa-cogs me-2"></i>Ação</th>
+                                <th><i class="fas fa-table me-2"></i>Tabela</th>
+                                <th><i class="fas fa-hashtag me-2"></i>ID</th>
+                                <th><i class="fas fa-info-circle me-2"></i>Detalhes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                data.logs.forEach(log => {
+                    const timestamp = new Date(log.timestamp).toLocaleString('pt-BR');
+                    
+                    // Cores por ação
+                    const actionColors = {
+                        'LOGIN': 'success',
+                        'LOGOUT': 'warning',
+                        'CREATE': 'info',
+                        'UPDATE': 'primary',
+                        'DELETE': 'danger',
+                        'RESTORE': 'success',
+                        'UPDATE_WARRANTY': 'warning',
+                        'UPDATE_MACHINE': 'primary',
+                        'UPDATE_WAREHOUSE': 'primary'
+                    };
+                    const color = actionColors[log.action] || 'secondary';
+                    
+                    // Ícones por ação
+                    const actionIcons = {
+                        'LOGIN': 'fa-sign-in-alt',
+                        'LOGOUT': 'fa-sign-out-alt',
+                        'CREATE': 'fa-plus-circle',
+                        'UPDATE': 'fa-edit',
+                        'DELETE': 'fa-trash',
+                        'RESTORE': 'fa-undo',
+                        'UPDATE_WARRANTY': 'fa-certificate',
+                        'UPDATE_MACHINE': 'fa-edit',
+                        'UPDATE_WAREHOUSE': 'fa-edit'
+                    };
+                    const icon = actionIcons[log.action] || 'fa-cog';
+                    
+                    const actionLabels = {
+                        'LOGIN': 'Login',
+                        'LOGOUT': 'Logout',
+                        'CREATE': 'Criado',
+                        'UPDATE': 'Atualizado',
+                        'DELETE': 'Deletado',
+                        'RESTORE': 'Restaurado',
+                        'UPDATE_WARRANTY': 'Garantia Atualizada',
+                        'UPDATE_MACHINE': 'Máquina Atualizada',
+                        'UPDATE_WAREHOUSE': 'Armazém Atualizado'
+                    };
+                    const label = actionLabels[log.action] || log.action;
+                    
+                    html += `
+                        <tr>
+                            <td class="fw-500"><small>${timestamp}</small></td>
+                            <td>
+                                <span class="badge bg-${color}">
+                                    <i class="fas ${icon} me-1"></i>${label}
+                                </span>
+                            </td>
+                            <td><small class="text-muted">${log.table_name || '-'}</small></td>
+                            <td><small>${log.record_id || '-'}</small></td>
+                            <td>
+                                ${log.old_values || log.new_values ? `
+                                    <button class="btn btn-xs btn-outline-secondary" onclick="showLogDetails('${btoa(log.old_values || '')}', '${btoa(log.new_values || '')}')">
+                                        <i class="fas fa-eye me-1"></i>Ver
+                                    </button>
+                                ` : '<small class="text-muted">-</small>'}
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `</tbody></table>`;
+                document.getElementById('historyContent').innerHTML = html;
+            } else {
+                document.getElementById('historyContent').innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>Nenhuma ação registrada para este usuário.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            document.getElementById('historyContent').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i>Erro ao carregar histórico.</div>';
+        });
+}
+
+// Função para exibir detalhes da alteração
+function showLogDetails(oldValuesB64, newValuesB64) {
+    const oldValues = atob(oldValuesB64);
+    const newValues = atob(newValuesB64);
+    
+    try {
+        const oldObj = JSON.parse(oldValues || '{}');
+        const newObj = JSON.parse(newValues || '{}');
+        
+        document.getElementById('oldValues').textContent = JSON.stringify(oldObj, null, 2);
+        document.getElementById('newValues').textContent = JSON.stringify(newObj, null, 2);
+    } catch (e) {
+        document.getElementById('oldValues').textContent = oldValues || 'N/A';
+        document.getElementById('newValues').textContent = newValues || 'N/A';
+    }
+    
+    const detailsModal = new bootstrap.Modal(document.getElementById('detailsModal'));
+    detailsModal.show();
+}
+
 function editUser(userId, userName) {
     const title = `Editar Usuário: ${userName}`;
     openActionModal(`edit_user.php?id=${userId}&modal=true`, title);

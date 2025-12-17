@@ -172,7 +172,7 @@ function requireLogin() {
 function requireAdmin() {
     requireLogin();
     if ($_SESSION['user_role'] !== 'admin') {
-        header('Location: dashboard.php');
+        header('Location: public/dashboard.php');
         exit;
     }
 }

@@ -22,7 +22,7 @@ if (typeof window.mediaUploadModuleLoaded !== 'undefined' && window.mediaUploadM
             fileInputId: 'media-file-input',
             cameraInputId: 'media-camera-input',
             hiddenInputId: 'uploaded_image',
-            uploadUrl: 'upload_image.php',
+            uploadUrl: '../utilities/upload_image.php',
             maxFileSize: 5 * 1024 * 1024, // 5MB
             allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'],
             itemType: 'products', // 'products' ou 'machine'

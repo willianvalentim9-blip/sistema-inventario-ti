@@ -53,7 +53,7 @@ if ($product_id) {
 
 
 if (empty($code)) {
-    $redirect_url = $_SERVER['HTTP_REFERER'] ?? 'dashboard.php';
+    $redirect_url = $_SERVER['HTTP_REFERER'] ?? '../../public/dashboard.php';
     header("Location: " . $redirect_url);
     exit();
 }

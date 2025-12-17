@@ -16,7 +16,7 @@ try {
     $stmt->execute([$user_id]);
     $user = $stmt->fetch();
     if (!$user) {
-        if (!$is_modal) header('Location: users.php');
+        if (!$is_modal) header('Location: ./users.php');
         exit('Usuário não encontrado.');
     }
 } catch (PDOException $e) {
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if (!in_array($role, ['admin', 'user'])) {
+    if (!in_array($role, ['admin', 'user', 'administrativo'])) {
         $response['message'] = 'Função inválida.';
         echo json_encode($response);
         exit;
@@ -116,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <select class="form-select" id="edit_role" name="role" required <?php echo ($user['id'] == $_SESSION['user_id']) ? 'disabled' : ''; ?>>
             <option value="user" <?php echo ($user['role'] === 'user') ? 'selected' : ''; ?>>Usuário</option>
             <option value="admin" <?php echo ($user['role'] === 'admin') ? 'selected' : ''; ?>>Administrador</option>
+            <option value="administrativo" <?php echo ($user['role'] === 'administrativo') ? 'selected' : ''; ?>>Administrativo</option>
         </select>
         <?php if ($user['id'] == $_SESSION['user_id']): ?>
             <small class="form-text text-muted">Você não pode alterar sua própria função.</small>

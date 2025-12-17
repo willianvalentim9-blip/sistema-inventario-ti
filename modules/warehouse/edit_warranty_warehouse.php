@@ -194,18 +194,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_data_stmt->execute([$warehouse_id]);
         $new_data = $new_data_stmt->fetch();
 
-        // Log com user_id
-        logAdminActivity($_SESSION["user_id"], "UPDATE_WARRANTY_WAREHOUSE", "warehouse", $warehouse_id, $old_data, $new_data);
+        // ⭐ NOVO: Apenas registra log se houver alterações reais
+        $data_changed = hasDataChanged($old_data, $new_data);
+        if ($data_changed) {
+            logAdminActivity($_SESSION["user_id"], "UPDATE_WARRANTY_WAREHOUSE", "warehouse", $warehouse_id, $old_data, $new_data);
+        }
 
         // Histórico de garantia
-        if (function_exists('registerWarrantyHistory')) {
+        if ($data_changed && function_exists('registerWarrantyHistory')) {
             registerWarrantyHistory($pdo, $warehouse_id, 'UPDATE', $old_data, $new_data, $_SESSION["user_id"], 'warehouse');
         }
 
         $pdo->commit();
         
-        $_SESSION['flash_message'] = 'Garantia do item atualizada com sucesso!';
-        $_SESSION['flash_type'] = 'success';
+        // ⭐ NOVO: Apenas mostra mensagem se houve alterações
+        if ($data_changed) {
+            $_SESSION['flash_message'] = 'Garantia do item atualizada com sucesso!';
+            $_SESSION['flash_type'] = 'success';
+        }
         
         if ($is_modal) {
             header('Content-Type: application/json');
@@ -244,7 +250,22 @@ if (!$is_modal) { include '../../includes/header.php'; }
 $form_message = '';
 if (isset($_SESSION['flash_message'])) {
     $alert_type = $_SESSION['flash_type'] === 'success' ? 'success' : 'danger';
-    $form_message = '<div class="alert alert-'. $alert_type . ' alert-dismissible fade show" role="alert">' . htmlspecialchars($_SESSION['flash_message']) . '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>';
+    $icon = $alert_type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    $form_message = '
+    <div class="alert alert-'.$alert_type.' fade show" role="alert" id="mainAlert">
+        <i class="fas '.$icon.' me-2"></i>' . htmlspecialchars($_SESSION['flash_message']) . '
+    </div>
+    <script>
+        // Auto-desaparece após 5 segundos
+        setTimeout(() => {
+            const alert = document.getElementById("mainAlert");
+            if (alert) {
+                alert.style.transition = "opacity 0.5s ease-out";
+                alert.style.opacity = "0";
+                setTimeout(() => alert.remove(), 500);
+            }
+        }, 5000);
+    </script>';
     unset($_SESSION['flash_message']);
     unset($_SESSION['flash_type']);
 }

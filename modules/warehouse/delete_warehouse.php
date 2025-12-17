@@ -7,10 +7,10 @@ require_once '../../config.php';
 
 header('Content-Type: application/json');
 
-// Verifica se o usuário está logado e tem permissão de administrador
+// Verifica se o usuário está logado e tem permissão de admin ou administrativo
 requireLogin();
 if ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo') {
-    echo json_encode(['success' => false, 'message' => 'Acesso negado. Apenas administradores podem excluir itens do warehouse.']);
+    echo json_encode(['success' => false, 'message' => 'Acesso negado. Apenas administradores e administrativos podem excluir itens do warehouse.']);
     exit;
 }
 

@@ -222,13 +222,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $_SESSION['success_message'] = 'Máquina criada com sucesso! Componentes vinculados e estoque deduzido.';
                     } catch (Exception $e) {
-                        // Registra erro mas não impede a criação da máquina
-                        debug_log("❌ ERRO ao salvar componentes da máquina: " . $e->getMessage());
+                        // ❌ ERRO CRÍTICO: Faz rollback e re-lança a exceção
+                        debug_log("❌ ERRO CRÍTICO ao salvar componentes da máquina: " . $e->getMessage());
                         debug_log("❌ Stack trace: " . $e->getTraceAsString());
+                        
+                        // Faz rollback de toda a transação (máquina NÃO será criada)
+                        if ($pdo->inTransaction()) {
+                            $pdo->rollBack();
+                            debug_log("❌ Rollback completo - Máquina NÃO será criada");
+                        }
+                        
                         logAdminActivity($_SESSION["user_id"], 'LINK_MACHINE_COMPONENTS_ERROR', 'machine_products', $machine_id,
                             'Error: ' . $e->getMessage());
 
-                        $_SESSION['error_message'] = 'ATENÇÃO: Máquina criada, mas houve erro ao vincular componentes: ' . $e->getMessage();
+                        // Re-lança a exceção para ser tratada no catch externo
+                        throw $e;
                     }
                 } else {
                     debug_log("⚠️ DEBUG: Nenhum componente para salvar (JSON vazio ou inválido)");
@@ -240,6 +248,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
         } catch (PDOException $e) {
+            $error_message = 'Erro ao adicionar máquina: ' . $e->getMessage();
+            error_log("Erro ao adicionar máquina: " . $e->getMessage());
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             $error_message = 'Erro ao adicionar máquina: ' . $e->getMessage();
             error_log("Erro ao adicionar máquina: " . $e->getMessage());
         }
@@ -327,7 +341,7 @@ $code_from_scanner = $_GET['code'] ?? '';
             <a href="ready_machines.php" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Voltar para Máquinas</a>
         </div>
         <div class="btn-group">
-            <a href="scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i>Scanner</a>
+            <a href="../barcode/scanner.php" class="btn btn-sm btn-secondary-custom"><i class="fas fa-qrcode me-1"></i>Scanner</a>
         </div>
     </div>
 </div>

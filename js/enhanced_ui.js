@@ -7,123 +7,9 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-
-    /**
-     * Lógica para upload e remoção do logo da empresa na página de configurações.
-     */
-    const setupLogoUpload = () => {
-        const logoInput = document.getElementById('logo-input');
-        const removeBtn = document.getElementById('remove-logo-btn');
-
-        // Função para fazer o upload do logo via AJAX
-        const uploadLogo = (file) => {
-            const formData = new FormData();
-            formData.append('logo', file);
-            
-            // Mostra um alerta de carregamento
-            if (window.showAlert) {
-                showAlert('Enviando novo logo...', 'loading', { persistent: true, duration: 0 });
-            }
-
-            fetch('update_logo.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Recarrega a página para exibir o novo logo e mensagem de sucesso
-                    location.reload(); 
-                } else {
-                    if (window.showAlert) {
-                        showAlert(data.message || 'Erro ao enviar a imagem.', 'error');
-                    }
-                }
-            })
-            .catch(error => {
-                if (window.showAlert) {
-                    showAlert('Erro de comunicação. Tente novamente.', 'error');
-                }
-                console.error('Error:', error);
-            });
-        };
-
-        // ===============================================
-        // *** CÓDIGO DE CORREÇÃO ADICIONADO AQUI ***
-        // ===============================================
-        // Função para remover o logo via AJAX
-        const removeLogo = () => {
-            // Usa o modal de confirmação, se disponível
-            if (window.showConfirmation) {
-                showConfirmation({
-                    title: 'Remover Logo',
-                    message: 'Tem certeza que deseja remover o logo da empresa?',
-                    type: 'danger',
-                    confirmText: 'Sim, Remover',
-                    onConfirm: () => {
-                        performLogoRemoval();
-                    }
-                });
-            } else {
-                // Fallback para um confirm padrão do navegador
-                if (confirm('Tem certeza que deseja remover o logo da empresa?')) {
-                    performLogoRemoval();
-                }
-            }
-        };
-
-        const performLogoRemoval = () => {
-            const formData = new FormData();
-            formData.append('remove_logo', '1');
-
-            if (window.showAlert) {
-                showAlert('Removendo logo...', 'loading', { persistent: true, duration: 0 });
-            }
-
-            fetch('update_logo.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    if (window.showAlert) {
-                        showAlert(data.message || 'Erro ao remover o logo.', 'error');
-                    }
-                }
-            })
-            .catch(error => {
-                if (window.showAlert) {
-                    showAlert('Erro de comunicação. Tente novamente.', 'error');
-                }
-                console.error('Error:', error);
-            });
-        };
-        // ===============================================
-        // *** FIM DO CÓDIGO DE CORREÇÃO ***
-        // ===============================================
-
-        // Adiciona os event listeners aos elementos
-        if (logoInput) {
-            logoInput.addEventListener('change', function() {
-                if (this.files && this.files[0]) {
-                    uploadLogo(this.files[0]);
-                }
-            });
-        }
-
-        if (removeBtn) {
-            // A linha abaixo estava faltando ou incorreta
-            removeBtn.addEventListener('click', removeLogo);
-        }
-    };
-
-    // Inicializa a funcionalidade de upload de logo se estivermos na página de configurações
-    if (document.getElementById('settings-form')) {
-        setupLogoUpload();
-    }
+    // NOTA: A funcionalidade de upload de logo foi movida para settings.php
+    // para evitar duplicação de código e conflitos de event listeners.
+    // A lógica agora está centralizada em modules/utilities/settings.php (linha 439+)
 });
 
 
@@ -142,6 +28,10 @@ document.addEventListener('DOMContentLoaded', function() {
  * });
  */
 function showConfirmation(options) {
+    // Desabilita todos os tooltips ativos para evitar sobreposição
+    const tooltips = document.querySelectorAll('.tooltip');
+    tooltips.forEach(tooltip => tooltip.remove());
+
     // Define valores padrão para as opções
     const config = {
         title: options.title || 'Confirmação',

@@ -217,7 +217,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'warranty_period_unit' => $has_warranty ? $warranty_period_unit : null
             ];
 
-            logAdminActivity($_SESSION["user_id"], 'UPDATE_MACHINE', 'ready_machines', $machine_id, $old_values, $new_values);
+            // ⭐ NOVO: Apenas registra log se houver alterações reais
+            $data_changed = hasDataChanged($old_values, $new_values);
+            if ($data_changed) {
+                logAdminActivity($_SESSION["user_id"], 'UPDATE_MACHINE', 'ready_machines', $machine_id, $old_values, $new_values);
+            }
 
             // Gerencia componentes se houver mudanças
             error_log("═══════════════════════════════════════════════════════════");
@@ -252,8 +256,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            $_SESSION['flash_message'] = 'Máquina atualizada com sucesso!';
-            $_SESSION['flash_type'] = 'success';
+            // ⭐ NOVO: Apenas mostra mensagem se houve alterações
+            if ($data_changed) {
+                $_SESSION['flash_message'] = 'Máquina atualizada com sucesso!';
+                $_SESSION['flash_type'] = 'success';
+            }
 
             // LÓGICA INTELIGENTE DE REDIRECIONAMENTO:
             if (!$had_warranty_before && $has_warranty == 1) {
@@ -289,15 +296,43 @@ if (!$is_modal) {
 // Se houver uma mensagem de erro/sucesso
 $form_message = '';
 if (!empty($error_message)) {
-    $form_message = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>' . htmlspecialchars($error_message) . '</div>';
+    $form_message = '<div class="alert alert-danger fade show" role="alert" id="mainAlert">
+        <i class="fas fa-exclamation-triangle me-2"></i>' . htmlspecialchars($error_message) . '
+    </div>
+    <script>
+        // Auto-desaparece após 5 segundos
+        setTimeout(() => {
+            const alert = document.getElementById("mainAlert");
+            if (alert) {
+                alert.style.transition = "opacity 0.5s ease-out";
+                alert.style.opacity = "0";
+                setTimeout(() => alert.remove(), 500);
+            }
+        }, 5000);
+    </script>';
 } elseif (isset($_SESSION['flash_message'])) {
     $alert_type = $_SESSION['flash_type'] === 'success' ? 'success' : 'danger';
-    $form_message = '<div class="alert alert-'. $alert_type . '">' . htmlspecialchars($_SESSION['flash_message']) . '</div>';
+    $icon = $alert_type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    $form_message = '
+    <div class="alert alert-'.$alert_type.' fade show" role="alert" id="mainAlert">
+        <i class="fas '.$icon.' me-2"></i>' . htmlspecialchars($_SESSION['flash_message']) . '
+    </div>
+    <script>
+        // Auto-desaparece após 5 segundos
+        setTimeout(() => {
+            const alert = document.getElementById("mainAlert");
+            if (alert) {
+                alert.style.transition = "opacity 0.5s ease-out";
+                alert.style.opacity = "0";
+                setTimeout(() => alert.remove(), 500);
+            }
+        }, 5000);
+    </script>';
     unset($_SESSION['flash_message']);
     unset($_SESSION['flash_type']);
 }
 
-$image_path = 'uploads/machines/' . htmlspecialchars($machine['image'] ?? '');
+$image_path = '../../uploads/machines/' . htmlspecialchars($machine['image'] ?? '');
 $image_exists = !empty($machine['image']) && file_exists($image_path);
 
 // Prepara JSON de componentes existentes para o JavaScript
@@ -1558,7 +1593,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <?php
 if (!$is_modal) {
-    include 'includes/warranty_modal_edit_machine.php';
+    include '../../includes/warranty_modal_edit_machine.php';
     include '../../includes/footer.php';
 }
 ?>

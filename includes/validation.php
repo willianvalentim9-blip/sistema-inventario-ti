@@ -365,7 +365,7 @@ class UserValidator extends Validator {
         }
         
         // Validar role
-        $validRoles = ['admin', 'user'];
+        $validRoles = ['admin', 'user', 'administrativo'];
         $this->inArray('role', $data['role'] ?? '', $validRoles);
         
         return !$this->hasErrors();

@@ -8,8 +8,17 @@ requireAdmin(); // Apenas admins podem alterar a logo
 header('Content-Type: application/json');
 
 $response = ['success' => false, 'message' => 'Ocorreu um erro desconhecido.'];
-$pdo = getConnection();
-$upload_dir = __DIR__ . '/assets/img/';
+
+try {
+    $pdo = getConnection();
+} catch (Exception $e) {
+    $response['message'] = 'Erro de conexão: ' . $e->getMessage();
+    echo json_encode($response);
+    exit();
+}
+
+// Salvar em uploads/logos/ na raiz do projeto
+$upload_dir = __DIR__ . '/../../uploads/logos/';
 
 try {
     // Busca a logo atual
@@ -21,8 +30,9 @@ try {
     if (isset($_POST['remove_logo']) && $_POST['remove_logo'] == '1') {
         
         // Remove o arquivo físico se ele existir
-        if (!empty($current_logo_path) && file_exists(__DIR__ . '/' . $current_logo_path)) {
-            @unlink(__DIR__ . '/' . $current_logo_path);
+        $full_path = __DIR__ . '/../../' . $current_logo_path;
+        if (!empty($current_logo_path) && file_exists($full_path)) {
+            @unlink($full_path);
         }
 
         // Atualiza o banco de dados para remover a referência
@@ -52,23 +62,27 @@ try {
         }
 
         // Apaga a logo antiga se existir
-        if (!empty($current_logo_path) && file_exists(__DIR__ . '/' . $current_logo_path)) {
-            @unlink(__DIR__ . '/' . $current_logo_path);
+        $full_path = __DIR__ . '/../../' . $current_logo_path;
+        if (!empty($current_logo_path) && file_exists($full_path)) {
+            @unlink($full_path);
         }
 
         // Cria um nome de arquivo novo e seguro
         $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         $new_filename = 'logo_' . time() . '.' . $file_ext;
-        $new_filepath_relative = 'assets/img/' . $new_filename;
+        $new_filepath_relative = 'uploads/logos/' . $new_filename;
         $new_filepath_absolute = $upload_dir . $new_filename;
 
         if (move_uploaded_file($file['tmp_name'], $new_filepath_absolute)) {
             // Atualiza o banco de dados
             $stmt = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('company_logo', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
             $stmt->execute([$new_filepath_relative]);
-            
+
             logAdminActivity($_SESSION['user_id'], 'UPDATE_LOGO', 'system_settings');
-            $response = ['success' => true, 'message' => 'Logo da empresa atualizada com sucesso!'];
+            $response = [
+                'success' => true,
+                'message' => 'Logo da empresa atualizada com sucesso!'
+            ];
         } else {
             throw new Exception('Falha ao mover o arquivo para o destino.');
         }

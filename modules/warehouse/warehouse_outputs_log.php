@@ -5,11 +5,11 @@
 require_once '../../config.php';
 requireLogin();
 
-// Verificar se usuário tem permissão (apenas admin e administrativo)
-if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'administrativo' && $_SESSION['user_role'] !== 'admin')) {
+// Verificar se usuário tem permissão (admin e administrativo)
+if (!isset($_SESSION['user_role']) || ($_SESSION['user_role'] !== 'admin' && $_SESSION['user_role'] !== 'administrativo')) {
     $_SESSION['flash_message'] = 'Acesso negado! Apenas usuários administrativos podem acessar esta área.';
     $_SESSION['flash_type'] = 'danger';
-    header('Location: ../../dashboard.php');
+    header('Location: ../../public/dashboard.php');
     exit;
 }
 

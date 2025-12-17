@@ -87,12 +87,14 @@ body {
 .sidebar-custom.collapsed {
     width: var(--sidebar-collapsed-width); /* Largura quando recolhida (80px). */
     min-width: var(--sidebar-collapsed-width); /* Largura mínima quando recolhida. */
+    overflow-y: hidden !important; /* Esconde scroll quando retraída */
+    overflow-x: hidden !important;
 }
 
 /* Cabeçalho da sidebar (onde fica o logo/nome). */
 .sidebar-header {
     padding: 0; /* Remove preenchimento. */
-    height: auto; /* Altura automática. */
+    height: 60px; /* Altura fixa padronizada com o topbar. */
 }
 
 /* Botão que expande/recolhe a sidebar. */
@@ -101,7 +103,7 @@ body {
     width: 100%; /* Ocupa toda a largura do cabeçalho. */
     color: var(--text-light); /* Cor do texto (branco). */
     text-decoration: none; /* Remove sublinhado. */
-    min-height: 50px; /* Altura mínima. */
+    min-height: 60px; /* Altura mínima padronizada. */
     display: flex; /* Ativa flexbox. */
     align-items: center; /* Centraliza verticalmente. */
     justify-content: center; /* Centraliza horizontalmente. */
@@ -124,7 +126,7 @@ body {
     opacity: 1; /* Totalmente opaco. */
 }
 .sidebar-custom.collapsed .sidebar-brand-toggle {
-    min-height: 80px; /* Aumenta a altura do botão quando recolhido para centralizar o ícone. */
+    min-height: 60px; /* Mantém a mesma altura quando recolhido. */
 }
 .sidebar-custom.collapsed .sidebar-brand-expanded {
     display: none; /* Esconde a versão expandida. */
@@ -194,6 +196,111 @@ body {
     margin-right: 0; /* Remove a margem. */
 }
 
+/* Esconde os chevrons de submenu quando retraído */
+.sidebar-custom.collapsed .sidebar-link .fa-chevron-down,
+.sidebar-custom.collapsed .sidebar-link .fa-chevron-up {
+    display: none !important;
+}
+
+/* Esconde completamente os submenus quando a sidebar está retraída */
+.sidebar-custom.collapsed .collapse,
+.sidebar-custom.collapsed .collapse.show,
+.sidebar-custom.collapsed .collapse.showing,
+.sidebar-custom.collapsed .collapse.collapsing,
+.sidebar-custom.collapsed ul[id*="Submenu"] {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+
+/* Força o submenu específico de movimentação a nunca aparecer quando retraído */
+.sidebar-custom.collapsed #movementationSubmenu {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+}
+
+/* ==========================================
+   SUBMENU FLUTUANTE PARA SIDEBAR RETRAÍDA
+   ========================================== */
+
+/* Container do submenu flutuante */
+.sidebar-floating-menu {
+    position: fixed !important;
+    left: 80px; /* Posiciona ao lado da sidebar retraída */
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+    max-width: 200px;
+    padding: 8px 0;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-10px);
+    transition: all 0.2s ease;
+    z-index: 10000 !important;
+    pointer-events: auto !important;
+    overflow: visible !important;
+}
+
+/* Submenu flutuante visível */
+.sidebar-floating-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+}
+
+/* Links dentro do submenu flutuante */
+.sidebar-floating-menu .floating-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    color: #333;
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+    gap: 12px;
+}
+
+.sidebar-floating-menu .floating-menu-item:hover {
+    background-color: #f0f0f0;
+}
+
+.sidebar-floating-menu .floating-menu-item.active {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.sidebar-floating-menu .floating-menu-item i {
+    font-size: 1.2rem;
+    width: 20px;
+    text-align: center;
+}
+
+.sidebar-floating-menu .floating-menu-item span {
+    font-size: 0.95rem;
+}
+
+/* Título do submenu flutuante (opcional) */
+.sidebar-floating-menu .floating-menu-title {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 4px;
+}
+
 /* Efeito ao passar o mouse sobre um link. */
 .sidebar-link:hover {
     background-color: var(--hover-color);
@@ -218,6 +325,14 @@ body {
 }
 
 /* ========================================
+   HEADER / TOPBAR (Barra Superior)
+   ======================================== */
+header {
+    height: 60px; /* Altura fixa padronizada com a sidebar. */
+    min-height: 60px; /* Altura mínima. */
+}
+
+/* ========================================
    OUTROS ESTILOS GERAIS
    ======================================== */
 .btn-primary-custom { background-color: var(--primary-color); border-color: var(--primary-color); color: var(--text-light); }
@@ -231,12 +346,16 @@ body {
 /* Estilo para o cabeçalho dos cards. */
 .card-header-custom { background-color: #fff; border-bottom: 1px solid var(--border-color); font-weight: 600; color: var(--primary-dark); }
 /* Contêiner para alertas (pop-ups de sucesso/erro). */
-#alert-container { position: fixed; top: 80px; right: 20px; z-index: 1056; min-width: 300px; }
+#alert-container { position: fixed; top: 70px; right: 20px; z-index: 1056; min-width: 300px; pointer-events: none; }
+#alert-container .alert { pointer-events: auto; }
+
+/* Dropdown menu - Garante que fique visível acima de outros elementos */
+.dropdown-menu { z-index: 1100 !important; }
 
 /* Logo da empresa no cabeçalho superior. */
 .navbar-brand-logo img {
-  height: 40px; /* Altura da imagem. */
-  max-width: 150px; /* Largura máxima. */
+  height: 48px; /* Altura da imagem aumentada. */
+  max-width: 180px; /* Largura máxima aumentada. */
   object-fit: contain; /* Garante que a imagem caiba sem distorcer. */
 }
     
